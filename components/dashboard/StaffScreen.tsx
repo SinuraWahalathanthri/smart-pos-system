@@ -1,0 +1,274 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Loader2, Plus, UserX, KeyRound } from "lucide-react";
+import { getSupabase } from "@/lib/supabase/client";
+import { DashboardShell, NotAllowed } from "./DashboardShell";
+import { permissions, useShop, type Role } from "./useShop";
+
+type StaffRow = {
+  id: string;
+  full_name: string;
+  staff_code: string;
+  role: Role;
+  is_active: boolean;
+  has_badge: boolean;
+  has_pin: boolean;
+  created_at: string;
+};
+
+/**
+ * Staff management. Owner only, enforced by the RPCs (`create_staff` refuses anyone else).
+ *
+ * PINs are set here and hashed server side; nothing in this screen ever reads a hash back.
+ */
+export function StaffScreen() {
+  const { ctx } = useShop();
+  const can = permissions(ctx?.role);
+
+  return (
+    <DashboardShell>
+      {can.manageStaff ? <StaffList /> : <NotAllowed what="staff" role={ctx?.role} />}
+    </DashboardShell>
+  );
+}
+
+function StaffList() {
+  const [rows, setRows] = useState<StaffRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const { data, error: err } = await getSupabase().rpc("staff_directory");
+    setLoading(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setRows((data as StaffRow[] | null) ?? []);
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function call(fn: string, args: Record<string, unknown>, ok: string) {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const { error: err } = await getSupabase().rpc(fn, args);
+    setBusy(false);
+    if (err) {
+      setError(err.message);
+      return false;
+    }
+    setMessage(ok);
+    await load();
+    return true;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Staff</h1>
+          <p className="text-sm text-muted">People who can sign in at the till.</p>
+        </div>
+        <button
+          onClick={() => setAdding(true)}
+          disabled={busy}
+          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-fg disabled:opacity-60"
+        >
+          <Plus size={16} /> Add staff
+        </button>
+      </div>
+
+      {message && <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">{message}</p>}
+      {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+
+      {adding && (
+        <AddStaffForm
+          onCancel={() => setAdding(false)}
+          onCreate={async (form) => {
+            const ok = await call(
+              "create_staff",
+              {
+                p_name: form.name,
+                p_staff_code: form.code,
+                p_role: form.role,
+                p_pin: form.pin,
+              },
+              `${form.name} can now sign in with code ${form.code}.`,
+            );
+            if (ok) setAdding(false);
+          }}
+          busy={busy}
+        />
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted">Loading...</p>
+      ) : rows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
+          No staff yet. Add a cashier to start selling.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border bg-surface">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-2 text-left text-xs uppercase text-muted">
+              <tr>
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Code</th>
+                <th className="px-4 py-2">Role</th>
+                <th className="px-4 py-2">Badge</th>
+                <th className="px-4 py-2">PIN</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-border">
+                  <td className="px-4 py-2 font-medium">{r.full_name}</td>
+                  <td className="px-4 py-2 font-mono">{r.staff_code}</td>
+                  <td className="px-4 py-2 capitalize">{r.role}</td>
+                  <td className="px-4 py-2 text-muted">{r.has_badge ? "Set" : "-"}</td>
+                  <td className="px-4 py-2">
+                    {/* No PIN means the till rejects every attempt, which reads as "wrong PIN". */}
+                    {r.has_pin ? <span className="text-muted">Set</span> : <span className="font-medium text-danger">Not set</span>}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className={r.is_active ? "text-success" : "text-muted"}>
+                      {r.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        title="Reset PIN"
+                        disabled={busy}
+                        onClick={() => {
+                          const pin = window.prompt(`New PIN for ${r.full_name} (4-8 digits)`);
+                          if (pin) void call("set_staff_pin", { p_staff_id: r.id, p_pin: pin }, "PIN updated.");
+                        }}
+                        className="rounded-lg p-2 text-muted hover:bg-surface-2"
+                      >
+                        <KeyRound size={16} />
+                      </button>
+                      {r.role !== "owner" && (
+                        <button
+                          title={r.is_active ? "Deactivate" : "Reactivate"}
+                          disabled={busy}
+                          onClick={() =>
+                            void call(
+                              "set_staff_active",
+                              { p_staff_id: r.id, p_active: !r.is_active },
+                              r.is_active ? "Staff deactivated." : "Staff reactivated.",
+                            )
+                          }
+                          className="rounded-lg p-2 text-muted hover:bg-surface-2"
+                        >
+                          <UserX size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddStaffForm({
+  onCreate,
+  onCancel,
+  busy,
+}: {
+  onCreate: (f: { name: string; code: string; role: Role; pin: string }) => void | Promise<void>;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const [form, setForm] = useState({ name: "", code: "", role: "cashier" as Role, pin: "" });
+  const valid = form.name.trim() && form.code.trim() && /^[0-9]{4,8}$/.test(form.pin);
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) void onCreate(form);
+      }}
+      className="space-y-3 rounded-xl border border-border bg-surface p-4"
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Full name</span>
+          <input
+            className="field"
+            autoFocus
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="Nimal Perera"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Staff code</span>
+          <input
+            className="field font-mono"
+            value={form.code}
+            onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+            placeholder="2"
+            maxLength={16}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Role</span>
+          <select
+            className="field"
+            value={form.role}
+            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
+          >
+            <option value="cashier">Cashier - till only</option>
+            <option value="supervisor">Supervisor - till and products</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">PIN</span>
+          <input
+            className="field font-mono"
+            type="password"
+            inputMode="numeric"
+            value={form.pin}
+            onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, "") }))}
+            placeholder="4-8 digits"
+            maxLength={8}
+          />
+        </label>
+      </div>
+
+      <p className="text-xs text-muted">
+        The PIN is hashed on the server and cannot be read back. If it is forgotten, reset it here.
+      </p>
+
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={!valid || busy}
+          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-fg disabled:opacity-50"
+        >
+          {busy && <Loader2 className="animate-spin" size={14} />} Add staff
+        </button>
+        <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-muted">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}

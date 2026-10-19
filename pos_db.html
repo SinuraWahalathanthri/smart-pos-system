@@ -1,0 +1,2021 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS Database Schema - MariaDB / BCNF</title>
+<style>
+  :root{
+    --bg:#faf8f5; --surface:#ffffff; --surface-2:#f3efe9; --border:#e2dcd3; --border-strong:#cfc6b8;
+    --text:#1f1b16; --muted:#6b6259; --accent:#8a4b1f; --accent-soft:#f7ede4;
+    --pk:#7c3aed; --fk:#0e7490; --uq:#b45309; --idx:#4d7c0f; --gen:#be123c;
+    --a:#8a4b1f; --b:#0e7490; --c:#4d7c0f; --d:#7c3aed; --e:#b45309; --f:#be123c; --g:#0369a1; --h:#4338ca; --i:#15803d; --j:#9f1239; --k:#57534e;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 90px}
+
+  /* ---------- masthead ---------- */
+  header.mast{padding:44px 0 26px;border-bottom:1px solid var(--border)}
+  .kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{margin:10px 0 8px;font-size:34px;line-height:1.15;letter-spacing:-.02em}
+  .sub{color:var(--muted);max-width:74ch;margin:0 0 18px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px}
+  .meta span{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:999px;padding:3px 10px;color:var(--muted)}
+
+  /* ---------- sticky nav ---------- */
+  nav.sticky{position:sticky;top:0;z-index:40;background:rgba(250,248,245,.94);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border);margin:0 -22px;padding:9px 22px}
+  nav.sticky .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  nav.sticky a{font-family:var(--mono);font-size:11.5px;text-decoration:none;color:var(--muted);
+    border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:var(--surface)}
+  nav.sticky a:hover{color:var(--accent);border-color:var(--border-strong)}
+
+  /* ---------- index (top of file) ---------- */
+  #index{margin-top:30px}
+  h2.sec{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border);font-weight:700}
+  .filter{display:flex;gap:10px;align-items:center;margin:0 0 16px;flex-wrap:wrap}
+  .filter input{flex:1;min-width:240px;font-family:var(--mono);font-size:13px;padding:9px 12px;
+    border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);outline:none}
+  .filter input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .filter .hint{font-size:12px;color:var(--muted);font-family:var(--mono)}
+  .idx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .idx-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .idx-card h4{margin:0 0 10px;font-size:13px;display:flex;align-items:center;gap:8px;letter-spacing:.02em}
+  .idx-card h4 .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:400}
+  .idx-card ol{margin:0;padding:0;list-style:none;columns:2;column-gap:18px}
+  .idx-card li{margin:0 0 3px;break-inside:avoid}
+  .idx-card a{font-family:var(--mono);font-size:12px;text-decoration:none;color:var(--text)}
+  .idx-card a:hover{color:var(--accent);text-decoration:underline}
+  .idx-card a .n{color:var(--muted);font-size:10.5px;margin-right:5px}
+  .badge{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:5px;
+    font-size:10.5px;font-weight:800;color:#fff;font-family:var(--mono);flex:none}
+  .bd-a{background:var(--a)}.bd-b{background:var(--b)}.bd-c{background:var(--c)}.bd-d{background:var(--d)}
+  .bd-e{background:var(--e)}.bd-f{background:var(--f)}.bd-g{background:var(--g)}.bd-h{background:var(--h)}
+  .bd-i{background:var(--i)}.bd-j{background:var(--j)}.bd-k{background:var(--k)}
+
+  /* ---------- prose / notes ---------- */
+  .note{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+  .note.warn{border-left-color:var(--gen);background:#fff5f6}
+  .note.ok{border-left-color:var(--c);background:#f6faf0}
+  .note h5{margin:0 0 6px;font-size:13px;letter-spacing:.02em}
+  .note p{margin:6px 0;color:var(--muted);font-size:14px}
+  .note p:last-child{margin-bottom:0}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:4px;padding:1px 5px}
+  .note code{background:#fff}
+
+  /* ---------- generic doc table ---------- */
+  table.doc{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;overflow:hidden;font-size:13.5px;margin:12px 0 4px}
+  table.doc th{background:var(--surface-2);text-align:left;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--border);font-weight:700}
+  table.doc td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  table.doc tr:last-child td{border-bottom:none}
+  table.doc td:first-child{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  table.doc td code{background:none;border:none;padding:0;font-size:12.5px}
+
+  /* ---------- schema tables ---------- */
+  .cat-h{display:flex;align-items:center;gap:10px;margin:52px 0 6px;font-size:21px;letter-spacing:-.01em}
+  .cat-h .badge{width:26px;height:26px;font-size:13px;border-radius:7px}
+  .cat-sub{color:var(--muted);font-size:13.5px;margin:0 0 20px}
+
+  section.tbl{margin:0 0 30px;scroll-margin-top:64px}
+  section.tbl.hidden{display:none}
+  section.tbl h3{margin:0 0 4px;font-size:16px;font-family:var(--mono);letter-spacing:-.01em;
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  section.tbl h3 .pill{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--muted);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:2px 8px}
+  .purpose{margin:2px 0 10px;color:var(--muted);font-size:13px}
+  table.cols{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;overflow:hidden;font-size:13px}
+  table.cols th{background:var(--surface-2);text-align:left;font-size:10.5px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--muted);padding:8px 11px;border-bottom:1px solid var(--border);font-weight:700}
+  table.cols td{padding:7px 11px;border-bottom:1px solid #f0ebe4;vertical-align:top}
+  table.cols tr:last-child td{border-bottom:none}
+  table.cols td:nth-child(1){font-family:var(--mono);font-size:12.3px;font-weight:600;white-space:nowrap}
+  table.cols td:nth-child(2){font-family:var(--mono);font-size:11.8px;color:var(--fk);white-space:nowrap}
+  table.cols td:nth-child(3){font-size:11.8px;white-space:nowrap}
+  table.cols td:nth-child(4){color:var(--muted);font-size:12.4px}
+  .pk{color:var(--pk);font-weight:800;font-family:var(--mono);font-size:10.5px}
+  .fk{color:var(--fk);font-weight:800;font-family:var(--mono);font-size:10.5px}
+  .uq{color:var(--uq);font-weight:800;font-family:var(--mono);font-size:10.5px}
+  .ix{color:var(--idx);font-weight:800;font-family:var(--mono);font-size:10.5px}
+  .gn{color:var(--gen);font-weight:800;font-family:var(--mono);font-size:10.5px}
+  .keys{margin:8px 0 0;font-size:11.8px;color:var(--muted);font-family:var(--mono);line-height:1.7}
+  .keys b{color:var(--text);font-weight:700}
+
+  footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+  @media print{
+    nav.sticky{display:none}
+    body{background:#fff;font-size:11px}
+    .wrap{max-width:none;padding:0}
+    section.tbl{break-inside:avoid}
+    .idx-grid{grid-template-columns:1fr 1fr}
+  }
+  @media (max-width:640px){
+    h1{font-size:26px}
+    .idx-card ol{columns:1}
+    table.cols td:nth-child(4){display:none}
+    table.cols th:nth-child(4){display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="kicker">Spice Shop POS &middot; Data Layer</div>
+  <h1>MariaDB Schema &mdash; Normalized to BCNF</h1>
+  <p class="sub">
+    Target schema for the point-of-sale system, ported from PostgreSQL/Supabase to <strong>MariaDB 11.x</strong>
+    and normalized to <strong>Boyce&ndash;Codd Normal Form</strong>. Every base table is listed with its columns,
+    keys, indexes and generated columns. Derived values that cannot live in a BCNF relation are moved to
+    views or explicitly registered as deliberate denormalization.
+  </p>
+  <div class="meta">
+    <span>engine: InnoDB</span>
+    <span>charset: utf8mb4 / uca1400_ai_ci</span>
+    <span>50 base tables</span>
+    <span>7 views</span>
+    <span>11 categories</span>
+    <span>target: MariaDB 11.4+</span>
+    <span>status: design only, not implemented</span>
+  </div>
+</header>
+
+<nav class="sticky">
+  <div class="row">
+    <a href="#index">Index</a>
+    <a href="#legend">Legend</a>
+    <a href="#port">MariaDB port</a>
+    <a href="#bcnf">BCNF analysis</a>
+    <a href="#cat-a">A Access</a>
+    <a href="#cat-b">B Catalogue</a>
+    <a href="#cat-c">C Inventory</a>
+    <a href="#cat-d">D Sales</a>
+    <a href="#cat-e">E Cash</a>
+    <a href="#cat-f">F Credit</a>
+    <a href="#cat-g">G Bottles</a>
+    <a href="#cat-h">H Purchasing</a>
+    <a href="#cat-i">I Production</a>
+    <a href="#cat-j">J Control</a>
+    <a href="#cat-k">K Reporting</a>
+    <a href="#views">Views</a>
+  </div>
+</nav>
+
+<!-- ============================ INDEX ============================ -->
+<section id="index">
+  <h2 class="sec">Index of tables</h2>
+
+  <div class="filter">
+    <input id="q" type="search" placeholder="Filter tables by name, category or column&hellip;" autocomplete="off">
+    <span class="hint" id="qcount">50 tables</span>
+  </div>
+
+  <div class="idx-grid">
+
+    <div class="idx-card" data-cat="a">
+      <h4><span class="badge bd-a">A</span> Organisation, Access &amp; Tenancy <span class="cnt">9</span></h4>
+      <ol>
+        <li><a href="#t-stores"><span class="n">01</span>stores</a></li>
+        <li><a href="#t-store_settings"><span class="n">02</span>store_settings</a></li>
+        <li><a href="#t-roles"><span class="n">03</span>roles</a></li>
+        <li><a href="#t-permissions"><span class="n">04</span>permissions</a></li>
+        <li><a href="#t-role_permissions"><span class="n">05</span>role_permissions</a></li>
+        <li><a href="#t-staff"><span class="n">06</span>staff</a></li>
+        <li><a href="#t-staff_credentials"><span class="n">07</span>staff_credentials</a></li>
+        <li><a href="#t-store_memberships"><span class="n">08</span>store_memberships</a></li>
+        <li><a href="#t-devices"><span class="n">09</span>devices</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="b">
+      <h4><span class="badge bd-b">B</span> Catalogue &amp; Pricing <span class="cnt">8</span></h4>
+      <ol>
+        <li><a href="#t-categories"><span class="n">10</span>categories</a></li>
+        <li><a href="#t-tax_classes"><span class="n">11</span>tax_classes</a></li>
+        <li><a href="#t-products"><span class="n">12</span>products</a></li>
+        <li><a href="#t-product_costs"><span class="n">13</span>product_costs</a></li>
+        <li><a href="#t-weight_labels"><span class="n">14</span>weight_labels</a></li>
+        <li><a href="#t-pack_sizes"><span class="n">15</span>pack_sizes</a></li>
+        <li><a href="#t-product_barcodes"><span class="n">16</span>product_barcodes</a></li>
+        <li><a href="#t-product_price_history"><span class="n">17</span>product_price_history</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="c">
+      <h4><span class="badge bd-c">C</span> Inventory, Stock &amp; Batches <span class="cnt">6</span></h4>
+      <ol>
+        <li><a href="#t-stock_move_types"><span class="n">18</span>stock_move_types</a></li>
+        <li><a href="#t-stock_movements"><span class="n">19</span>stock_movements</a></li>
+        <li><a href="#t-product_batches"><span class="n">20</span>product_batches</a></li>
+        <li><a href="#t-batch_allocations"><span class="n">21</span>batch_allocations</a></li>
+        <li><a href="#t-stock_takes"><span class="n">22</span>stock_takes</a></li>
+        <li><a href="#t-stock_take_lines"><span class="n">23</span>stock_take_lines</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="d">
+      <h4><span class="badge bd-d">D</span> Sales, Lines &amp; Payments <span class="cnt">6</span></h4>
+      <ol>
+        <li><a href="#t-payment_methods"><span class="n">24</span>payment_methods</a></li>
+        <li><a href="#t-sales"><span class="n">25</span>sales</a></li>
+        <li><a href="#t-sale_items"><span class="n">26</span>sale_items</a></li>
+        <li><a href="#t-payments"><span class="n">27</span>payments</a></li>
+        <li><a href="#t-refunds"><span class="n">28</span>refunds</a></li>
+        <li><a href="#t-refund_lines"><span class="n">29</span>refund_lines</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="e">
+      <h4><span class="badge bd-e">E</span> Shifts, Cash &amp; Receipts <span class="cnt">3</span></h4>
+      <ol>
+        <li><a href="#t-shifts"><span class="n">30</span>shifts</a></li>
+        <li><a href="#t-cash_movements"><span class="n">31</span>cash_movements</a></li>
+        <li><a href="#t-receipt_sequences"><span class="n">32</span>receipt_sequences</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="f">
+      <h4><span class="badge bd-f">F</span> Customers &amp; Credit <span class="cnt">2</span></h4>
+      <ol>
+        <li><a href="#t-customers"><span class="n">33</span>customers</a></li>
+        <li><a href="#t-customer_credit_entries"><span class="n">34</span>customer_credit_entries</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="g">
+      <h4><span class="badge bd-g">G</span> Returnable Bottles <span class="cnt">2</span></h4>
+      <ol>
+        <li><a href="#t-bottle_event_types"><span class="n">35</span>bottle_event_types</a></li>
+        <li><a href="#t-bottle_ledger"><span class="n">36</span>bottle_ledger</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="h">
+      <h4><span class="badge bd-h">H</span> Purchasing &amp; Receiving <span class="cnt">5</span></h4>
+      <ol>
+        <li><a href="#t-suppliers"><span class="n">37</span>suppliers</a></li>
+        <li><a href="#t-purchase_orders"><span class="n">38</span>purchase_orders</a></li>
+        <li><a href="#t-purchase_order_lines"><span class="n">39</span>purchase_order_lines</a></li>
+        <li><a href="#t-goods_receipts"><span class="n">40</span>goods_receipts</a></li>
+        <li><a href="#t-goods_receipt_lines"><span class="n">41</span>goods_receipt_lines</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="i">
+      <h4><span class="badge bd-i">I</span> Production &amp; Packing <span class="cnt">3</span></h4>
+      <ol>
+        <li><a href="#t-production_runs"><span class="n">42</span>production_runs</a></li>
+        <li><a href="#t-production_inputs"><span class="n">43</span>production_inputs</a></li>
+        <li><a href="#t-production_outputs"><span class="n">44</span>production_outputs</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="j">
+      <h4><span class="badge bd-j">J</span> Approval, Audit &amp; Alerts <span class="cnt">4</span></h4>
+      <ol>
+        <li><a href="#t-approvals"><span class="n">45</span>approvals</a></li>
+        <li><a href="#t-audit_log"><span class="n">46</span>audit_log</a></li>
+        <li><a href="#t-notification_types"><span class="n">47</span>notification_types</a></li>
+        <li><a href="#t-notifications"><span class="n">48</span>notifications</a></li>
+      </ol>
+    </div>
+
+    <div class="idx-card" data-cat="k">
+      <h4><span class="badge bd-k">K</span> Reporting &amp; Rollups <span class="cnt">2</span></h4>
+      <ol>
+        <li><a href="#t-daily_sales_rollup"><span class="n">49</span>daily_sales_rollup</a></li>
+        <li><a href="#t-monthly_summaries"><span class="n">50</span>monthly_summaries</a></li>
+      </ol>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <h5>How to read this document</h5>
+    <p>
+      Categories <strong>A&ndash;J</strong> are normalized base tables governed by BCNF.
+      Category <strong>K</strong> is deliberately outside BCNF: those tables hold pre-computed aggregates for
+      dashboards and are rebuilt from the base tables, never written by hand.
+      Section <a href="#views">Views</a> lists the derived relations that replace the stored
+      <code>stock_on_hand</code> / <code>packets_on_hand</code> columns in the current PostgreSQL schema.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ LEGEND ============================ -->
+<section id="legend">
+  <h2 class="sec">Legend</h2>
+  <table class="doc">
+    <thead><tr><th>Marker</th><th>Meaning</th><th>Where it appears</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pk">PK</span></td><td>Primary key</td><td>Column that identifies the row; composite for join tables</td></tr>
+      <tr><td><span class="fk">FK</span></td><td>Foreign key</td><td>Reference to another table, named in the note</td></tr>
+      <tr><td><span class="uq">UQ</span></td><td>Unique constraint</td><td>Candidate keys, listed in the key summary under each table</td></tr>
+      <tr><td><span class="ix">IDX</span></td><td>Secondary index</td><td>Listed in the key summary; chosen for the queries the app makes</td></tr>
+      <tr><td><span class="gn">GEN</span></td><td>Generated column</td><td>MariaDB <code>GENERATED ALWAYS AS (&hellip;) STORED</code>, replaces a derived column</td></tr>
+      <tr><td><span class="badge bd-a">A</span>&hellip;<span class="badge bd-k">K</span></td><td>Category badge</td><td>Colour-coded per category throughout</td></tr>
+    </tbody>
+  </table>
+  <p class="purpose">
+    All identifiers are <code>BINARY(16)</code> UUIDs unless the table is a high-volume ledger
+    (<code>BIGINT UNSIGNED AUTO_INCREMENT</code> plus a unique client UUID for idempotency).
+    All timestamps are <code>DATETIME(3)</code> stored in UTC; see the 2038 note below.
+    All money columns are integer minor units (cents) named <code>*_cents</code>.
+  </p>
+</section>
+
+<!-- ============================ MARIA DB PORT ============================ -->
+<section id="port">
+  <h2 class="sec">PostgreSQL to MariaDB: what actually changes</h2>
+  <p class="purpose">
+    The current backend leans on four Postgres/Supabase features that MariaDB does not have.
+    These are not cosmetic differences; two of them change the architecture.
+  </p>
+
+  <table class="doc">
+    <thead><tr><th>Postgres / Supabase</th><th>MariaDB replacement</th><th>Consequence</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Row Level Security (22 policies)</td>
+        <td>Nothing equivalent</td>
+        <td><strong>Architectural.</strong> Tenant isolation must move out of the database.</td>
+      </tr>
+      <tr>
+        <td><code>SECURITY DEFINER</code> functions as the write gateway</td>
+        <td><code>CREATE PROCEDURE</code> + <code>SQL SECURITY DEFINER</code>, or an application service</td>
+        <td>Writes still validated centrally, but callable by anyone holding the DB login unless <code>GRANT</code> is tight.</td>
+      </tr>
+      <tr>
+        <td><code>jsonb</code> + GIN indexes</td>
+        <td><code>JSON</code> (validated <code>LONGTEXT</code>)</td>
+        <td>No containment queries or GIN. Promote queryable fields to real columns; JSON only for opaque payloads.</td>
+      </tr>
+      <tr>
+        <td><code>uuid</code></td>
+        <td><code>BINARY(16)</code> + <code>UUID_TO_BIN(x, 1)</code></td>
+        <td>16 bytes vs 36. The <code>1</code> (swap) flag reorders the timestamp for clustered insert locality; requires MariaDB 10.7+.</td>
+      </tr>
+      <tr>
+        <td><code>timestamptz</code></td>
+        <td><code>DATETIME(3)</code> in UTC</td>
+        <td><code>TIMESTAMP</code> in MariaDB is 32-bit and dies in <strong>2038</strong>. Use <code>DATETIME</code> for anything long-lived.</td>
+      </tr>
+      <tr>
+        <td><code>crypt()</code> (pgcrypto bcrypt)</td>
+        <td>Application-side <code>bcrypt</code> / <code>argon2id</code></td>
+        <td>Hashes live in <code>staff_credentials</code>. The DB never sees a plaintext PIN.</td>
+      </tr>
+      <tr>
+        <td>Triggers using <code>set_config()</code> to bypass guards</td>
+        <td>Stored procedure owning the write; no guard bypass variable</td>
+        <td>The <code>app.stock_write</code> trick has no equivalent; the ledger write becomes a procedure call.</td>
+      </tr>
+      <tr>
+        <td>Partial indexes</td>
+        <td>Generated column + normal index</td>
+        <td>e.g. <code>is_open</code> generated flag on <code>shifts</code> for an efficient open-shift lookup.</td>
+      </tr>
+      <tr>
+        <td><code>ON CONFLICT DO NOTHING</code></td>
+        <td><code>INSERT &hellip; ON DUPLICATE KEY UPDATE</code></td>
+        <td>Idempotent sale re-submission still works, keyed on the client UUID.</td>
+      </tr>
+      <tr>
+        <td><code>numeric(12,3)</code></td>
+        <td><code>DECIMAL(12,3)</code></td>
+        <td>Identical semantics. Weights and quantities keep 3 decimals.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <h5>The one decision you must make before this is built</h5>
+    <p>
+      Today the database <em>is</em> the security boundary: 22 RLS policies mean a stolen anon key cannot read
+      another store's sales, and cashiers physically cannot write a sale except through <code>complete_sale()</code>.
+      <strong>MariaDB has no RLS.</strong> Once the schema moves, that guarantee disappears from the database
+      layer and must be re-created somewhere else:
+    </p>
+    <p>
+      <strong>Option 1 (recommended)</strong> &mdash; a thin TypeScript service tier owns all writes, holds the
+      DB credentials, resolves the tenant from the session, and calls stored procedures. The browser never
+      touches MariaDB. This preserves the current security posture and is a smaller change than it sounds,
+      because the RPC surface is already the only write path.
+    </p>
+    <p>
+      <strong>Option 2</strong> &mdash; one MariaDB account per role plus <code>SQL SECURITY DEFINER</code> views and
+      procedures, with column-level <code>GRANT</code>s hiding <code>cost_cents</code> and credential hashes.
+      Weaker: any credential leak is a full-tenant leak, and there is no per-row isolation.
+    </p>
+    <p>
+      <strong>Option 3 (not recommended)</strong> &mdash; connect the browser directly. There is then nothing
+      between an attacker and every store's data.
+    </p>
+  </div>
+
+  <div class="note ok">
+    <h5>What MariaDB gives back</h5>
+    <p>
+      <code>CHECK</code> constraints are enforced (10.2+), which Postgres 15 also has but the current schema
+      barely uses. <code>GENERATED &hellip; STORED</code> columns make derived money values real columns that
+      cannot drift, which is how this schema removes several BCNF violations rather than merely documenting them.
+      Native InnoDB partitioning, mature replication, and predictable single-binary operations are genuine
+      wins for a shop that may run its own server.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ BCNF ============================ -->
+<section id="bcnf">
+  <h2 class="sec">Normalization to BCNF</h2>
+
+  <p class="purpose">
+    A relation is in BCNF if, for every non-trivial functional dependency <code>X &rarr; Y</code>,
+    <code>X</code> is a superkey. The current 17-table schema violates this in nine places. Each violation,
+    and the decomposition that removes it, is listed below.
+  </p>
+
+  <table class="doc">
+    <thead><tr><th>#</th><th>Relation / attribute</th><th>Violating dependency</th><th>Why it fails BCNF</th><th>Fix in this schema</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><code>pack_sizes.label</code></td>
+        <td><code>label &rarr; weight_g</code></td>
+        <td>"250 g" always means 250 grams, so <code>label</code> determines <code>weight_g</code> but is not a superkey. Two rows could disagree.</td>
+        <td><code>weight_labels(weight_g&nbsp;PK, label)</code>; <code>pack_sizes</code> drops <code>label</code>.</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><code>products.stock_on_hand</code><br><code>pack_sizes.packets_on_hand</code></td>
+        <td>Aggregate of <code>stock_movements</code></td>
+        <td>A stored sum is not functionally determined by the row's key; it is determined by other <em>rows</em>. Update anomaly by construction.</td>
+        <td>Columns removed. <code>v_stock_levels</code> computes <code>SUM(qty_change)</code>.</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><code>sale_items.line_total_cents</code><br><code>tax_cents</code></td>
+        <td><code>qty, unit_price &rarr; line_total</code><br><code>line_total, rate &rarr; tax</code></td>
+        <td>The determinant is not a superkey, so the value can contradict its inputs.</td>
+        <td><code>GENERATED &hellip; STORED</code> columns: computed by the engine, impossible to disagree.</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><code>sales.total_cents</code></td>
+        <td><code>subtotal, discount &rarr; total</code></td>
+        <td>Same shape as #3: derived within the row.</td>
+        <td><code>GENERATED &hellip; STORED</code> on the row.</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><code>bottle_ledger.amount_cents</code></td>
+        <td><code>qty, store.bottle_fee &rarr; amount</code></td>
+        <td>The fee lives in another table, so the amount silently becomes wrong when the fee changes. Classic update anomaly.</td>
+        <td>Snapshot <code>fee_unit_cents</code> onto the row; <code>amount_cents</code> generated from <code>qty &times; fee_unit</code>.</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td><code>products.tax_rate_pct</code></td>
+        <td><code>tax_class &rarr; rate</code>, copied onto every product</td>
+        <td>The rate is a fact about the class, not the product. A VAT change must touch every row, and a missed row is a wrong tax return.</td>
+        <td><code>tax_classes(tax_class_id&nbsp;PK, rate_bp, is_inclusive)</code>; products reference it. Sales still snapshot the rate.</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td><code>product_barcodes.store_id</code><br><code>pack_sizes.store_id</code><br><code>product_costs.store_id</code></td>
+        <td><code>product_id &rarr; store_id</code></td>
+        <td><code>store_id</code> is transitively determined by the parent, so it is redundant in the child and can contradict it.</td>
+        <td>Dropped from these children; derived by join or via a view.</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td><code>profiles</code> (person + credential + role + device)</td>
+        <td><code>auth_user_id &rarr; store_id, role</code> with <code>auth_user_id</code> UNIQUE</td>
+        <td>Technically BCNF, but four independent entities are fused into one relation, which is why a person can belong to exactly one store.</td>
+        <td>Decomposed into <code>staff</code>, <code>staff_credentials</code>, <code>store_memberships</code>, <code>devices</code>.</td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td><code>notifications.title</code>, <code>body</code></td>
+        <td><code>product_id &rarr; products.name</code>, copied into the message</td>
+        <td>Renaming a product leaves stale alert text behind, and the copy cannot be reconciled.</td>
+        <td>Store <code>type_code</code>, <code>product_id</code> and <code>params JSON</code>; render the text in the app.</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td><code>settings</code> (EAV key/value)</td>
+        <td>No declared dependency; typed by convention only</td>
+        <td>Not a normal-form violation but an untyped relation: any key, any value, no constraint.</td>
+        <td>Typed 1:1 <code>store_settings</code> with a <code>CHECK</code> per column.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="sec">Deliberate denormalization register</h2>
+  <p class="purpose">
+    Some redundancy is required by law or by physics. Rather than pretend otherwise, every such field is
+    registered here with its justification and the mechanism that keeps it correct. Nothing else in the
+    schema is allowed to be redundant.
+  </p>
+  <table class="doc">
+    <thead><tr><th>Field</th><th>Duplicates</th><th>Why it must stay</th><th>How it is kept correct</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>sale_items.name_snapshot</code><br><code>label_snapshot</code><br><code>tax_rate_bp</code></td>
+        <td><code>products.name</code>, <code>weight_labels.label</code>, <code>tax_classes.rate_bp</code></td>
+        <td>An issued invoice is a legal document. If a product is renamed or VAT changes tomorrow, last month's receipt must not change.</td>
+        <td>Written once at sale time; the table is insert-only for these columns (no UPDATE grant).</td>
+      </tr>
+      <tr>
+        <td><code>sales.subtotal_cents</code><br><code>tax_included_cents</code></td>
+        <td>Aggregate of <code>sale_items</code></td>
+        <td>The posted total is the figure the customer paid and the figure that was receipted.</td>
+        <td>Recalculated and asserted inside the sale procedure; mismatch aborts the transaction.</td>
+      </tr>
+      <tr>
+        <td><code>stock_movements.store_id</code><br><code>sales.store_id</code></td>
+        <td>Derivable from <code>product_id</code></td>
+        <td>These are the partitioned, high-volume tables. Tenant filtering and physical partitioning need the column locally.</td>
+        <td>Composite <code>FK</code> to the product's store, so a cross-store row is rejected by the engine.</td>
+      </tr>
+      <tr>
+        <td><code>product_batches.qty_remaining</code></td>
+        <td>Sum of <code>batch_allocations</code></td>
+        <td>FEFO allocation must read remaining quantity per batch on every scan; recomputing per line is too slow at the till.</td>
+        <td>Updated in the same transaction as the allocation, with a <code>CHECK (qty_remaining &ge; 0)</code>.</td>
+      </tr>
+      <tr>
+        <td><code>*_rollup</code> tables (K)</td>
+        <td><code>sales</code> + <code>sale_items</code></td>
+        <td>Dashboard aggregates over millions of rows.</td>
+        <td>Rebuilt on a schedule; explicitly read-only to the app.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h5>Table count: 17 &rarr; 50</h5>
+    <p>
+      The growth is not inflation. It is decomposition of fused relations (1 table became 4 in category A),
+      eight lookup tables that carry their own attributes, and four subsystems the current schema never
+      modelled at all: shifts and cash, customers and credit, purchasing and receiving, and production.
+      A schema that answers more questions has more tables; the alternative is columns that mean different
+      things depending on the row.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ A ============================ -->
+<div class="cat-h" id="cat-a"><span class="badge bd-a">A</span> Organisation, Access &amp; Tenancy</div>
+<p class="cat-sub">
+  The current schema fuses a person, their credential, their role and their till into one
+  <code>profiles</code> row, and forces one store per person with <code>auth_user_id UNIQUE</code>.
+  Here those are four independent relations, so a person can work at several branches with a
+  different role at each, and a device can be retired without touching a human record.
+</p>
+
+<section class="tbl" id="t-stores" data-cat="a">
+  <h3>stores <span class="pill">A1</span><span class="pill">16 cols</span></h3>
+  <p class="purpose">One row per branch. Root of every tenant-scoped relation.</p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td><code>UUID_TO_BIN(uuid,1)</code> for insert locality</td></tr>
+      <tr><td>code</td><td>VARCHAR(16)</td><td><span class="uq">UQ</span></td><td>Short branch code, used on receipts (<code>CMB-01</code>)</td></tr>
+      <tr><td>name</td><td>VARCHAR(120)</td><td></td><td>Trading name shown on the till</td></tr>
+      <tr><td>legal_name</td><td>VARCHAR(160)</td><td></td><td>Registered entity for the VAT invoice</td></tr>
+      <tr><td>vat_no</td><td>VARCHAR(32)</td><td></td><td>Null when the branch is not separately registered</td></tr>
+      <tr><td>address_line1</td><td>VARCHAR(160)</td><td></td><td></td></tr>
+      <tr><td>address_line2</td><td>VARCHAR(160)</td><td></td><td></td></tr>
+      <tr><td>city</td><td>VARCHAR(64)</td><td></td><td></td></tr>
+      <tr><td>postal_code</td><td>VARCHAR(16)</td><td></td><td></td></tr>
+      <tr><td>phone</td><td>VARCHAR(32)</td><td></td><td></td></tr>
+      <tr><td>currency_code</td><td>CHAR(3)</td><td></td><td>ISO 4217 (<code>LKR</code>); minor unit held once in app config, not per row</td></tr>
+      <tr><td>timezone</td><td>VARCHAR(64)</td><td></td><td>IANA name (<code>Asia/Colombo</code>); fixes shift and report day boundaries</td></tr>
+      <tr><td>prices_include_tax</td><td>BOOLEAN</td><td></td><td>Server must recompute totals using this</td></tr>
+      <tr><td>is_active</td><td>BOOLEAN</td><td><span class="ix">IDX</span></td><td>Branches are closed, never deleted</td></tr>
+      <tr><td>created_at / updated_at</td><td>DATETIME(3)</td><td></td><td>UTC; <code>updated_at</code> via <code>ON UPDATE CURRENT_TIMESTAMP(3)</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(is_active)</p>
+</section>
+
+<section class="tbl" id="t-store_settings" data-cat="a">
+  <h3>store_settings <span class="pill">A2</span><span class="pill">11 cols</span></h3>
+  <p class="purpose">
+    Typed 1:1 replacement for the <code>settings</code> key/value table. Every knob is a real column with a
+    <code>CHECK</code>, so a bad value is rejected instead of being accepted as a valid JSON string.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>1:1 with <code>stores</code>; enforces exactly one settings row</td></tr>
+      <tr><td>max_cashier_discount_bp</td><td>INT</td><td></td><td>Basis points (500 = 5%); <code>CHECK 0..10000</code></td></tr>
+      <tr><td>bottle_fee_cents</td><td>BIGINT</td><td></td><td>Replaces the hardcoded <code>BOTTLE_FEE</code></td></tr>
+      <tr><td>pack_low_stock_qty</td><td>DECIMAL(12,3)</td><td></td><td>Replaces the hardcoded <code>PACK_LOW_STOCK = 3</code></td></tr>
+      <tr><td>allow_sell_out_of_stock</td><td>BOOLEAN</td><td></td><td>Counts are rarely exact; default true</td></tr>
+      <tr><td>offline_max_hours</td><td>SMALLINT</td><td></td><td>Refuse new sales after this long without the server</td></tr>
+      <tr><td>rounding_step_cents</td><td>INT</td><td></td><td>Cash rounding (100 = nearest rupee)</td></tr>
+      <tr><td>custom_weight_enabled</td><td>BOOLEAN</td><td></td><td>Off by default; shop sells fixed packets</td></tr>
+      <tr><td>receipt_footer</td><td>VARCHAR(255)</td><td></td><td>Legal text printed under the totals</td></tr>
+      <tr><td>loyalty_enabled</td><td>BOOLEAN</td><td></td><td>Reserved; no loyalty module in scope</td></tr>
+      <tr><td>updated_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>PK:</b> store_id &nbsp;&middot;&nbsp; <b>FK:</b> store_id &rarr; stores</p>
+</section>
+
+<section class="tbl" id="t-roles" data-cat="a">
+  <h3>roles <span class="pill">A3</span><span class="pill">4 cols</span></h3>
+  <p class="purpose">
+    A role is a named bundle of permissions. Replaces the fixed <code>user_role</code> enum, which could not
+    express "supervisor at branch 1, cashier at branch 2".
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>role_id</td><td>SMALLINT UNSIGNED</td><td><span class="pk">PK</span></td><td><code>AUTO_INCREMENT</code>; narrow lookup key</td></tr>
+      <tr><td>code</td><td>VARCHAR(32)</td><td><span class="uq">UQ</span></td><td><code>owner</code>, <code>supervisor</code>, <code>cashier</code>, <code>packer</code>, <code>accountant</code></td></tr>
+      <tr><td>name</td><td>VARCHAR(64)</td><td></td><td>Display label</td></tr>
+      <tr><td>rank</td><td>TINYINT</td><td></td><td>Ordering only; authority comes from <code>role_permissions</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code)</p>
+</section>
+
+<section class="tbl" id="t-permissions" data-cat="a">
+  <h3>permissions <span class="pill">A4</span><span class="pill">3 cols</span></h3>
+  <p class="purpose">
+    The catalogue of actions that can be granted. Any action that appears in an approval dialog or an audit
+    row must exist here, so the set of privileged operations is enumerable rather than scattered in code.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>permission_id</td><td>SMALLINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>code</td><td>VARCHAR(64)</td><td><span class="uq">UQ</span></td><td><code>sale.void</code>, <code>sale.refund</code>, <code>discount.override</code>, <code>price.override</code>, <code>stock.adjust</code>, <code>product.edit</code>, <code>product.archive</code>, <code>staff.manage</code>, <code>settings.manage</code>, <code>credit.grant</code>, <code>report.view</code>, <code>audit.view</code></td></tr>
+      <tr><td>description</td><td>VARCHAR(190)</td><td></td><td>Shown in the staff admin screen</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code)</p>
+</section>
+
+<section class="tbl" id="t-role_permissions" data-cat="a">
+  <h3>role_permissions <span class="pill">A5</span><span class="pill">3 cols</span></h3>
+  <p class="purpose">
+    Junction resolving the many-to-many between roles and permissions. The optional ceiling lives here because
+    it is a fact about the <em>pair</em>, not about the role or the permission alone.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>role_id</td><td>SMALLINT UNSIGNED</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>&rarr; roles</td></tr>
+      <tr><td>permission_id</td><td>SMALLINT UNSIGNED</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>&rarr; permissions</td></tr>
+      <tr><td>limit_cents</td><td>BIGINT</td><td></td><td>Optional ceiling, e.g. refunds up to LKR 5,000; <code>NULL</code> = unlimited</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>PK:</b> (role_id, permission_id) &nbsp;&middot;&nbsp; <b>FK:</b> both parents, <code>ON DELETE CASCADE</code></p>
+</section>
+
+<section class="tbl" id="t-staff" data-cat="a">
+  <h3>staff <span class="pill">A6</span><span class="pill">10 cols</span></h3>
+  <p class="purpose">
+    A human being. Holds person-only facts; deliberately <strong>no</strong> store, role, staff code or PIN.
+    Note what is absent: <code>staff_code</code> moved to <code>store_memberships</code>, because the code
+    <code>3</code> is scoped to a branch, not to a person.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>staff_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>full_name</td><td>VARCHAR(120)</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>email</td><td>VARCHAR(190)</td><td><span class="uq">UQ</span></td><td>Nullable; only owners/supervisors need an account</td></tr>
+      <tr><td>phone</td><td>VARCHAR(32)</td><td></td><td></td></tr>
+      <tr><td>default_store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Which branch the till opens on; not an access grant</td></tr>
+      <tr><td>hired_on</td><td>DATE</td><td></td><td></td></tr>
+      <tr><td>is_active</td><td>BOOLEAN</td><td><span class="ix">IDX</span></td><td>Leavers are deactivated, never deleted (audit trail)</td></tr>
+      <tr><td>created_at / updated_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Self-reference to whoever onboarded them</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(email) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(full_name), IDX(is_active)</p>
+</section>
+
+<section class="tbl" id="t-staff_credentials" data-cat="a">
+  <h3>staff_credentials <span class="pill">A7</span><span class="pill">7 cols</span></h3>
+  <p class="purpose">
+    Secrets, isolated so <code>GRANT SELECT (â€¦)</code> can exclude this table from every role the app uses.
+    This is the column-level replacement for Postgres's per-column grants.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>staff_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>1:1 with <code>staff</code></td></tr>
+      <tr><td>pin_hash</td><td>VARCHAR(255)</td><td></td><td>argon2id, produced in the service tier; null when PIN login is disabled</td></tr>
+      <tr><td>badge_hash</td><td>VARCHAR(255)</td><td></td><td>argon2id of the scanned badge barcode</td></tr>
+      <tr><td>failed_attempts</td><td>SMALLINT</td><td></td><td>Shared counter; <code>CHECK 0..3</code></td></tr>
+      <tr><td>locked_until</td><td>DATETIME(3)</td><td><span class="ix">IDX</span></td><td>5-minute lockout after three wrong PINs</td></tr>
+      <tr><td>must_change_pin</td><td>BOOLEAN</td><td></td><td>Set on issue and after an owner reset</td></tr>
+      <tr><td>pin_updated_at</td><td>DATETIME(3)</td><td></td><td>Supports an "expire stale PINs" policy</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>PK:</b> staff_id &nbsp;&middot;&nbsp; <b>FK:</b> staff_id &rarr; staff, <code>ON DELETE CASCADE</code></p>
+</section>
+
+<section class="tbl" id="t-store_memberships" data-cat="a">
+  <h3>store_memberships <span class="pill">A8</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    <strong>This table is the fix for the single-store ceiling.</strong> A person may hold several memberships,
+    one per branch, each with its own staff code and role. The current
+    <code>profiles.auth_user_id UNIQUE</code> makes this impossible.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>&rarr; stores</td></tr>
+      <tr><td>staff_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>&rarr; staff</td></tr>
+      <tr><td>staff_code</td><td>VARCHAR(16)</td><td><span class="uq">UQ</span></td><td>The code typed at the till; unique <em>within the store</em></td></tr>
+      <tr><td>role_id</td><td>SMALLINT UNSIGNED</td><td><span class="fk">FK</span></td><td>Role at <em>this</em> branch</td></tr>
+      <tr><td>is_active</td><td>BOOLEAN</td><td><span class="ix">IDX</span></td><td>Revoke one branch without touching others</td></tr>
+      <tr><td>joined_on</td><td>DATE</td><td></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>PK:</b> (store_id, staff_id) &nbsp;&middot;&nbsp; <b>Unique:</b> UQ(store_id, staff_code) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(staff_id), IDX(store_id, is_active)
+  </p>
+</section>
+
+<section class="tbl" id="t-devices" data-cat="a">
+  <h3>devices <span class="pill">A9</span><span class="pill">10 cols</span></h3>
+  <p class="purpose">
+    A till, separate from the person using it. Needed for per-device receipt series, per-device offline limits,
+    and a sync queue that can be audited per terminal.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>device_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>&rarr; stores</td></tr>
+      <tr><td>device_code</td><td>VARCHAR(16)</td><td><span class="uq">UQ</span></td><td><code>TILL-01</code>; also the receipt series prefix</td></tr>
+      <tr><td>name</td><td>VARCHAR(64)</td><td></td><td>"Front counter", "Packing room"</td></tr>
+      <tr><td>api_key_hash</td><td>VARCHAR(255)</td><td></td><td>argon2id of the terminal key held by the service tier</td></tr>
+      <tr><td>receipt_prefix</td><td>VARCHAR(8)</td><td></td><td>Overrides the store default when set</td></tr>
+      <tr><td>last_seen_at</td><td>DATETIME(3)</td><td></td><td>Heartbeat; flags a terminal that has gone dark</td></tr>
+      <tr><td>last_sync_at</td><td>DATETIME(3)</td><td></td><td>Last successful queue drain</td></tr>
+      <tr><td>is_active</td><td>BOOLEAN</td><td><span class="ix">IDX</span></td><td>Revoked terminal cannot sync</td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(device_code) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id), IDX(is_active)</p>
+</section>
+
+<!-- ============================ B ============================ -->
+<div class="cat-h" id="cat-b"><span class="badge bd-b">B</span> Catalogue &amp; Pricing</div>
+<p class="cat-sub">
+  Products, pack sizes, barcodes and cost. Two BCNF fixes land here: <code>weight_labels</code> removes
+  <code>label &rarr; weight_g</code>, and <code>tax_classes</code> removes <code>tax_class &rarr; rate</code>
+  from every product row. Stored stock columns are gone entirely.
+</p>
+
+<section class="tbl" id="t-categories" data-cat="b">
+  <h3>categories <span class="pill">B1</span><span class="pill">7 cols</span></h3>
+  <p class="purpose">Product grouping for the picture grid tabs. Self-referencing to allow a parent category.</p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>category_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>&rarr; stores</td></tr>
+      <tr><td>name</td><td>VARCHAR(64)</td><td><span class="uq">UQ</span></td><td>Unique per store</td></tr>
+      <tr><td>parent_category_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Nullable; one level of nesting in practice</td></tr>
+      <tr><td>sort_order</td><td>SMALLINT</td><td></td><td>Tab order on the till</td></tr>
+      <tr><td>color</td><td>VARCHAR(16)</td><td></td><td>Fallback tile accent</td></tr>
+      <tr><td>is_active</td><td>BOOLEAN</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, name) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id), IDX(parent_category_id)</p>
+</section>
+
+<section class="tbl" id="t-tax_classes" data-cat="b">
+  <h3>tax_classes <span class="pill">B2</span><span class="pill">6 cols</span></h3>
+  <p class="purpose">
+    The VAT rate as a fact about the class, held once. A rate change is one <code>UPDATE</code> here, not a
+    sweep over every product â€” which is what caused the update anomaly in the current schema.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>tax_class_id</td><td>SMALLINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Rates can differ by jurisdiction</td></tr>
+      <tr><td>code</td><td>VARCHAR(32)</td><td><span class="uq">UQ</span></td><td><code>VAT18</code>, <code>ZERO</code>, <code>EXEMPT</code></td></tr>
+      <tr><td>name</td><td>VARCHAR(64)</td><td></td><td></td></tr>
+      <tr><td>rate_bp</td><td>INT</td><td></td><td>Basis points: 1800 = 18%. Integer avoids float drift</td></tr>
+      <tr><td>is_inclusive</td><td>BOOLEAN</td><td></td><td>Shelf prices include tax in this shop</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, code) &nbsp;&middot;&nbsp; <b>Check:</b> <code>rate_bp BETWEEN 0 AND 10000</code></p>
+</section>
+
+<section class="tbl" id="t-products" data-cat="b">
+  <h3>products <span class="pill">B3</span><span class="pill">23 cols</span></h3>
+  <p class="purpose">
+    The catalogue entry. <strong>No <code>stock_on_hand</code></strong> (derived from the ledger), and
+    <strong>no <code>tax_rate_pct</code></strong> (referenced from <code>tax_classes</code>).
+    <code>price_cents</code> applies only when <code>sale_mode = 'unit'</code>; weighted products price per pack size.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="uq">UQ</span></td><td>Part of UQ(store_id, product_id) for composite child FKs</td></tr>
+      <tr><td>sku</td><td>VARCHAR(64)</td><td><span class="uq">UQ</span></td><td>Nullable; unique per store</td></tr>
+      <tr><td>name</td><td>VARCHAR(190)</td><td><span class="ix">IDX</span></td><td>Full-text candidate for search</td></tr>
+      <tr><td>category_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>tax_class_id</td><td>SMALLINT UNSIGNED</td><td><span class="fk">FK</span></td><td>Replaces the copied <code>tax_rate_pct</code></td></tr>
+      <tr><td>kind</td><td>ENUM</td><td></td><td><code>raw_material</code>, <code>packaging</code>, <code>finished</code>, <code>trade</code>, <code>fee</code></td></tr>
+      <tr><td>sale_mode</td><td>ENUM</td><td></td><td><code>unit</code> or <code>weighted</code></td></tr>
+      <tr><td>price_cents</td><td>BIGINT</td><td></td><td>Unit items only; <code>CHECK price_cents &ge; 0</code></td></tr>
+      <tr><td>price_per_kg_cents</td><td>BIGINT</td><td></td><td>Reporting; used for custom weights when enabled</td></tr>
+      <tr><td>is_returnable_bottle</td><td>BOOLEAN</td><td></td><td>Triggers the bottle-fee rule</td></tr>
+      <tr><td>has_expiry</td><td>BOOLEAN</td><td></td><td></td></tr>
+      <tr><td>shelf_life_days</td><td>SMALLINT</td><td></td><td>Defaults the batch expiry at packing</td></tr>
+      <tr><td>reorder_level</td><td>DECIMAL(12,3)</td><td></td><td>Per product; pack sizes carry their own</td></tr>
+      <tr><td>lead_time_days</td><td>SMALLINT</td><td></td><td>Drives days-of-cover alerts</td></tr>
+      <tr><td>is_favourite</td><td>BOOLEAN</td><td><span class="ix">IDX</span></td><td>Fastest sellers, pinned first in the grid</td></tr>
+      <tr><td>color</td><td>VARCHAR(16)</td><td></td><td>Tile accent when there is no image</td></tr>
+      <tr><td>image_path</td><td>VARCHAR(255)</td><td></td><td>Object-storage key, not a URL</td></tr>
+      <tr><td>is_active / archived_at / archived_by_id</td><td>BOOLEAN / DATETIME(3) / BINARY(16)</td><td></td><td>Archived products stay readable on old bills</td></tr>
+      <tr><td>created_at / updated_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(store_id, product_id), UQ(store_id, sku) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(store_id, is_active), IDX(category_id), IDX(tax_class_id), IDX(name)
+  </p>
+</section>
+
+<section class="tbl" id="t-product_costs" data-cat="b">
+  <h3>product_costs <span class="pill">B4</span><span class="pill">4 cols</span></h3>
+  <p class="purpose">
+    Cost separated from price so <code>GRANT</code> can deny it to every till-facing database role.
+    <code>store_id</code> is dropped: it was transitively determined by <code>product_id</code>.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>1:1 with <code>products</code></td></tr>
+      <tr><td>cost_cents</td><td>BIGINT</td><td></td><td>Unit cost; <code>CHECK cost_cents &ge; 0</code></td></tr>
+      <tr><td>cost_basis</td><td>ENUM</td><td></td><td><code>purchase</code>, <code>production</code>, <code>manual</code></td></tr>
+      <tr><td>updated_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>PK:</b> product_id &nbsp;&middot;&nbsp; <b>FK:</b> product_id &rarr; products, <code>ON DELETE CASCADE</code></p>
+</section>
+
+<section class="tbl" id="t-weight_labels" data-cat="b">
+  <h3>weight_labels <span class="pill">B5</span><span class="pill">3 cols</span></h3>
+  <p class="purpose">
+    Removes the <code>label &rarr; weight_g</code> dependency. "250 g" is a presentation of 250 grams and now
+    exists exactly once, so two pack sizes can never disagree about what a 250 g packet is.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>weight_g</td><td>INT</td><td><span class="pk">PK</span></td><td>Grams; the real determinant</td></tr>
+      <tr><td>label</td><td>VARCHAR(16)</td><td><span class="uq">UQ</span></td><td><code>50 g</code>, <code>250 g</code>, <code>1 kg</code></td></tr>
+      <tr><td>sort_order</td><td>SMALLINT</td><td></td><td>Picker order, smallest first</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>PK:</b> weight_g &nbsp;&middot;&nbsp; <b>Unique:</b> UQ(label) &nbsp;&middot;&nbsp; Global (not per store): a gram is a gram</p>
+</section>
+
+<section class="tbl" id="t-pack_sizes" data-cat="b">
+  <h3>pack_sizes <span class="pill">B6</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    One sellable packet size. Each is its own stock and its own price, which is why a 50 g and a 1 kg packet
+    of the same spice are separate rows. <code>label</code> and <code>packets_on_hand</code> are gone.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="uq">UQ</span></td><td>&rarr; products</td></tr>
+      <tr><td>weight_g</td><td>INT</td><td><span class="fk">FK</span></td><td>&rarr; weight_labels; replaces the denormalized <code>label</code></td></tr>
+      <tr><td>price_cents</td><td>BIGINT</td><td></td><td>Fixed price for this packet, tax-inclusive</td></tr>
+      <tr><td>packaging_product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Branded pouch consumed per packet; deducted at packing</td></tr>
+      <tr><td>reorder_level</td><td>DECIMAL(12,3)</td><td></td><td>Per-size low-stock threshold</td></tr>
+      <tr><td>sort_order / is_active</td><td>SMALLINT / BOOLEAN</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(product_id, weight_g) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(product_id), IDX(weight_g), IDX(packaging_product_id)
+  </p>
+</section>
+
+<section class="tbl" id="t-product_barcodes" data-cat="b">
+  <h3>product_barcodes <span class="pill">B7</span><span class="pill">6 cols</span></h3>
+  <p class="purpose">
+    A product or a pack size can carry several barcodes. <code>store_id</code> is dropped; global uniqueness
+    is kept instead, with internal codes drawn from a reserved prefix so two branches cannot collide.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>barcode_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null for a unit product's barcode</td></tr>
+      <tr><td>barcode</td><td>VARCHAR(64)</td><td><span class="uq">UQ</span></td><td>Globally unique; scanning is therefore unambiguous</td></tr>
+      <tr><td>barcode_type</td><td>ENUM</td><td></td><td><code>ean13</code>, <code>code128</code>, <code>internal</code></td></tr>
+      <tr><td>is_primary</td><td>BOOLEAN</td><td></td><td>Which code is printed on the label</td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(barcode) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(product_id), IDX(pack_size_id) &nbsp;&middot;&nbsp;
+    Internal codes use a reserved GS1 prefix allocated per branch
+  </p>
+</section>
+
+<section class="tbl" id="t-product_price_history" data-cat="b">
+  <h3>product_price_history <span class="pill">B8</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    Append-only price trail for the audit screen and margin analysis. A product-level change has
+    <code>pack_size_id NULL</code>; a pack change sets it.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>price_change_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td><code>AUTO_INCREMENT</code>; high volume, narrow key</td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null = product-level price</td></tr>
+      <tr><td>old_price_cents</td><td>BIGINT</td><td></td><td>Null on first issue</td></tr>
+      <tr><td>new_price_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>reason</td><td>VARCHAR(190)</td><td></td><td>Required by the owner-only edit flow</td></tr>
+      <tr><td>changed_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>changed_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(product_id, changed_at), IDX(pack_size_id)</p>
+</section>
+
+<!-- ============================ C ============================ -->
+<div class="cat-h" id="cat-c"><span class="badge bd-c">C</span> Inventory, Stock &amp; Batches</div>
+<p class="cat-sub">
+  The single most important structural change. The current schema keeps <code>stock_on_hand</code> on
+  <code>products</code> and <code>packets_on_hand</code> on <code>pack_sizes</code>, guarded by a trigger and a
+  <code>set_config</code> bypass variable. Both columns are removed: stock is the sum of an append-only ledger,
+  and the ledger is the only truth.
+</p>
+
+<section class="tbl" id="t-stock_move_types" data-cat="c">
+  <h3>stock_move_types <span class="pill">C1</span><span class="pill">4 cols</span></h3>
+  <p class="purpose">
+    Lookup for movement kinds. Replaces the <code>stock_move_type</code> enum so a new reason can be added
+    without a schema migration, and lets each type declare its effect on stock as data.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>move_type_id</td><td>TINYINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>code</td><td>VARCHAR(32)</td><td><span class="uq">UQ</span></td><td><code>sale</code>, <code>return</code>, <code>purchase</code>, <code>adjustment</code>, <code>void</code>, <code>opening</code>, <code>production_in</code>, <code>production_out</code>, <code>packing</code>, <code>damage</code>, <code>expiry</code></td></tr>
+      <tr><td>direction</td><td>ENUM</td><td></td><td><code>in</code>, <code>out</code>, <code>either</code>; used to validate the sign of <code>qty_change</code></td></tr>
+      <tr><td>affects_cost</td><td>BOOLEAN</td><td></td><td>Whether <code>unit_cost_cents</code> is meaningful for this type</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code)</p>
+</section>
+
+<section class="tbl" id="t-stock_movements" data-cat="c">
+  <h3>stock_movements <span class="pill">C2</span><span class="pill">13 cols</span></h3>
+  <p class="purpose">
+    Append-only ledger. Every quantity change in the system is a row here â€” there is no other way to change
+    stock. Partitioned monthly by <code>created_at</code>; this is the highest-volume table after
+    <code>sale_items</code>.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>movement_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td><code>AUTO_INCREMENT</code>; narrow clustered key</td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Registered denormalization: required for partitioning and tenant filtering</td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null = product-level stock (bulk kg, unit items)</td></tr>
+      <tr><td>batch_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Set when the movement is batch-tracked (FEFO)</td></tr>
+      <tr><td>move_type_id</td><td>TINYINT UNSIGNED</td><td><span class="fk">FK</span></td><td>&rarr; stock_move_types</td></tr>
+      <tr><td>qty_change</td><td>DECIMAL(12,3)</td><td></td><td>Signed; <code>CHECK qty_change &lt;&gt; 0</code></td></tr>
+      <tr><td>unit_cost_cents</td><td>BIGINT</td><td></td><td>Snapshot at the time of the movement</td></tr>
+      <tr><td>ref_table</td><td>VARCHAR(32)</td><td></td><td>Polymorphic source: <code>sales</code>, <code>goods_receipts</code>, <code>production_runs</code>&hellip;</td></tr>
+      <tr><td>ref_id</td><td>BINARY(16)</td><td><span class="ix">IDX</span></td><td>Deliberately no FK: it points at several tables</td></tr>
+      <tr><td>reason</td><td>VARCHAR(190)</td><td></td><td>Required for adjustments, damage and expiry writes</td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td><span class="ix">IDX</span></td><td>Partition key</td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Indexes:</b> IDX(product_id, created_at), IDX(store_id, created_at), IDX(pack_size_id),
+    IDX(batch_id), IDX(ref_table, ref_id) &nbsp;&middot;&nbsp;
+    <b>Partition:</b> <code>PARTITION BY RANGE (TO_DAYS(created_at))</code>, monthly
+  </p>
+</section>
+
+<section class="tbl" id="t-product_batches" data-cat="c">
+  <h3>product_batches <span class="pill">C3</span><span class="pill">12 cols</span></h3>
+  <p class="purpose">
+    Expiry tracking per batch (FEFO). Currently defined but never populated â€” receiving and packing were
+    never built, so the expiry alert path is dead code. Category H and I are what light it up.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>batch_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null for bulk/raw material</td></tr>
+      <tr><td>batch_no</td><td>VARCHAR(64)</td><td><span class="uq">UQ</span></td><td>Supplied by the dairy, or generated at packing</td></tr>
+      <tr><td>manufactured_on</td><td>DATE</td><td></td><td></td></tr>
+      <tr><td>expires_on</td><td>DATE</td><td><span class="ix">IDX</span></td><td>FEFO ordering key</td></tr>
+      <tr><td>qty_received</td><td>DECIMAL(12,3)</td><td></td><td>Immutable after insert</td></tr>
+      <tr><td>qty_remaining</td><td>DECIMAL(12,3)</td><td></td><td>Registered denormalization; <code>CHECK qty_remaining &ge; 0 AND &le; qty_received</code></td></tr>
+      <tr><td>unit_cost_cents</td><td>BIGINT</td><td></td><td>Landed cost for COGS</td></tr>
+      <tr><td>source_receipt_line_id</td><td>BIGINT UNSIGNED</td><td><span class="fk">FK</span></td><td>&rarr; goods_receipt_lines, or null when made in production</td></tr>
+      <tr><td>received_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(store_id, product_id, batch_no), UQ(store_id, batch_id) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(product_id, expires_on), IDX(expires_on, qty_remaining)
+  </p>
+</section>
+
+<section class="tbl" id="t-batch_allocations" data-cat="c">
+  <h3>batch_allocations <span class="pill">C4</span><span class="pill">6 cols</span></h3>
+  <p class="purpose">
+    Which batch a sale line actually consumed. Without this the FEFO rule is a suggestion: you can say
+    "sell the oldest first" but you cannot prove which packet left the shelf.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>allocation_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td><code>AUTO_INCREMENT</code></td></tr>
+      <tr><td>batch_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>&rarr; product_batches</td></tr>
+      <tr><td>sale_item_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Null when the allocation came from a stock take or write-off</td></tr>
+      <tr><td>qty</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty &gt; 0</code></td></tr>
+      <tr><td>allocated_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+      <tr><td>allocation_type</td><td>ENUM</td><td></td><td><code>sale</code>, <code>writeoff</code>, <code>transfer</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(batch_id), IDX(sale_item_id)</p>
+</section>
+
+<section class="tbl" id="t-stock_takes" data-cat="c">
+  <h3>stock_takes <span class="pill">C5</span><span class="pill">10 cols</span></h3>
+  <p class="purpose">
+    A physical count session. The ledger guard forbids editing stock directly, so a count must be a document
+    that produces adjustment movements â€” otherwise there is no explanation for a variance.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>stock_take_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>reference</td><td>VARCHAR(32)</td><td><span class="uq">UQ</span></td><td><code>ST-2026-10-01</code>, unique per store</td></tr>
+      <tr><td>status</td><td>ENUM</td><td><span class="ix">IDX</span></td><td><code>open</code>, <code>counting</code>, <code>posted</code>, <code>cancelled</code></td></tr>
+      <tr><td>scope</td><td>ENUM</td><td></td><td><code>full</code>, <code>category</code>, <code>cycle</code></td></tr>
+      <tr><td>started_by_staff_id / posted_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Separation of duties: the counter should not be the poster</td></tr>
+      <tr><td>started_at / posted_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+      <tr><td>notes</td><td>VARCHAR(255)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, reference) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id, status)</p>
+</section>
+
+<section class="tbl" id="t-stock_take_lines" data-cat="c">
+  <h3>stock_take_lines <span class="pill">C6</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    One counted product. <code>expected_qty</code> is snapshotted at count time, so the variance stays
+    meaningful even after later sales post.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>stock_take_line_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>stock_take_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>batch_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null for untracked products</td></tr>
+      <tr><td>expected_qty</td><td>DECIMAL(12,3)</td><td></td><td>Snapshot of the ledger sum</td></tr>
+      <tr><td>counted_qty</td><td>DECIMAL(12,3)</td><td></td><td>What was actually on the shelf</td></tr>
+      <tr><td>variance_qty</td><td>DECIMAL(12,3)</td><td><span class="gn">GEN</span></td><td><code>GENERATED ALWAYS AS (counted_qty - expected_qty) STORED</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(stock_take_id, product_id, pack_size_id, batch_id) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(stock_take_id)
+  </p>
+</section>
+
+<!-- ============================ D ============================ -->
+<div class="cat-h" id="cat-d"><span class="badge bd-d">D</span> Sales, Lines &amp; Payments</div>
+<p class="cat-sub">
+  The till's write path. <code>sale_items</code> carries the snapshots that make a receipt a legal document
+  (registered denormalization), while money that is arithmetic within a row becomes a generated column.
+  Refunds are new: the current schema has a <code>refunded</code> status and a <code>return</code> movement
+  type but no procedure that can actually reverse a paid sale.
+</p>
+
+<section class="tbl" id="t-payment_methods" data-cat="d">
+  <h3>payment_methods <span class="pill">D1</span><span class="pill">6 cols</span></h3>
+  <p class="purpose">
+    Lookup replacing the <code>pay_method</code> enum, with the attributes the till actually needs:
+    whether a reference is mandatory, whether it settles immediately, and whether it may be used offline.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>method_id</td><td>TINYINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>code</td><td>VARCHAR(16)</td><td><span class="uq">UQ</span></td><td><code>cash</code>, <code>card</code>, <code>qr</code>, <code>credit</code></td></tr>
+      <tr><td>name</td><td>VARCHAR(48)</td><td></td><td></td></tr>
+      <tr><td>requires_reference</td><td>BOOLEAN</td><td></td><td>Card terminal slip or LankaQR reference</td></tr>
+      <tr><td>settles_immediately</td><td>BOOLEAN</td><td></td><td>Credit = false; opens a receivable</td></tr>
+      <tr><td></td><td></td><td></td><td>Offline eligibility is enforced by <code>store_settings.offline_max_hours</code> plus this flag</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code)</p>
+</section>
+
+<section class="tbl" id="t-sales" data-cat="d">
+  <h3>sales <span class="pill">D2</span><span class="pill">22 cols</span></h3>
+  <p class="purpose">
+    One completed bill. The primary key is the <strong>client-generated UUID</strong>, which is what makes
+    offline sync idempotent: a retried upload hits a duplicate key instead of double-counting.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>sale_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td>Generated on the till; never reassigned</td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>device_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Which terminal submitted it</td></tr>
+      <tr><td>shift_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Null only for imported history; needed for drawer reconciliation</td></tr>
+      <tr><td>receipt_no</td><td>BIGINT UNSIGNED</td><td><span class="uq">UQ</span></td><td>Officially assigned by the sequence procedure</td></tr>
+      <tr><td>local_receipt_no</td><td>BIGINT UNSIGNED</td><td></td><td>What the till printed while offline</td></tr>
+      <tr><td>cashier_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Who served the customer</td></tr>
+      <tr><td>customer_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null = walk-in</td></tr>
+      <tr><td>status</td><td>ENUM</td><td><span class="ix">IDX</span></td><td><code>completed</code>, <code>partially_refunded</code>, <code>refunded</code>, <code>voided</code></td></tr>
+      <tr><td>subtotal_cents</td><td>BIGINT</td><td></td><td>Registered denormalization: sum of lines</td></tr>
+      <tr><td>discount_cents</td><td>BIGINT</td><td></td><td><code>CHECK 0 &le; discount_cents &le; subtotal_cents</code></td></tr>
+      <tr><td>total_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>GENERATED ALWAYS AS (subtotal_cents - discount_cents) STORED</code></td></tr>
+      <tr><td>tax_included_cents</td><td>BIGINT</td><td></td><td>VAT contained in the total; asserted server-side</td></tr>
+      <tr><td>bottles_returned</td><td>INT</td><td></td><td>Empties handed back at the counter</td></tr>
+      <tr><td>bottle_fee_cents</td><td>BIGINT</td><td></td><td>Total non-return fees on this bill</td></tr>
+      <tr><td>rounding_cents</td><td>INT</td><td></td><td>Cash rounding adjustment, reported separately</td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td><span class="ix">IDX</span></td><td>When it happened on the till</td></tr>
+      <tr><td>received_at</td><td>DATETIME(3)</td><td></td><td>When the server accepted it; the two differ when offline</td></tr>
+      <tr><td>void_reason / voided_by_staff_id</td><td>VARCHAR(190) / BINARY(16)</td><td></td><td>Whole-bill cancellation, supervisor approved</td></tr>
+      <tr><td>sync_status</td><td>ENUM</td><td></td><td><code>pending</code>, <code>synced</code>, <code>failed</code>, <code>conflict</code></td></tr>
+      <tr><td>sync_error</td><td>VARCHAR(255)</td><td></td><td>Why the server refused it</td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(store_id, receipt_no), UQ(store_id, sale_id) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(store_id, created_at), IDX(shift_id), IDX(customer_id), IDX(cashier_staff_id, created_at), IDX(status) &nbsp;&middot;&nbsp;
+    <b>Partition:</b> monthly by <code>created_at</code>
+  </p>
+</section>
+
+<section class="tbl" id="t-sale_items" data-cat="d">
+  <h3>sale_items <span class="pill">D3</span><span class="pill">19 cols</span></h3>
+  <p class="purpose">
+    One bill line, including struck-through voided portions â€” nothing is deleted, because a void is an event
+    that must remain visible. <code>line_total_cents</code> and <code>tax_cents</code> are generated, so they
+    cannot contradict <code>qty &times; unit_price</code>.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>sale_item_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>sale_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>&rarr; sales</td></tr>
+      <tr><td>line_no</td><td>SMALLINT UNSIGNED</td><td><span class="uq">UQ</span></td><td>Position on the bill; unique per sale</td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Null for the bottle-fee line</td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>kind</td><td>ENUM</td><td></td><td><code>item</code> or <code>bottle_fee</code></td></tr>
+      <tr><td>name_snapshot</td><td>VARCHAR(190)</td><td></td><td>Registered denormalization: the name as printed</td></tr>
+      <tr><td>label_snapshot</td><td>VARCHAR(32)</td><td></td><td>e.g. <code>250 g</code> as printed</td></tr>
+      <tr><td>qty</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty &gt; 0</code></td></tr>
+      <tr><td>unit_price_cents</td><td>BIGINT</td><td></td><td>Snapshot; a later price change cannot rewrite history</td></tr>
+      <tr><td>line_total_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>ROUND(qty * unit_price_cents)</code> stored</td></tr>
+      <tr><td>tax_class_id</td><td>SMALLINT UNSIGNED</td><td><span class="fk">FK</span></td><td>Which class applied</td></tr>
+      <tr><td>tax_rate_bp</td><td>INT</td><td></td><td>Snapshot of the rate at the time of sale</td></tr>
+      <tr><td>tax_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>ROUND(line_total * rate_bp / (10000 + rate_bp))</code></td></tr>
+      <tr><td>status</td><td>ENUM</td><td></td><td><code>active</code> or <code>voided</code></td></tr>
+      <tr><td>void_reason / voided_by_name / voided_at</td><td>VARCHAR(190) / VARCHAR(120) / DATETIME(3)</td><td></td><td><code>voided_by_name</code> is a snapshot because the approver may have been offline</td></tr>
+      <tr><td>discount_cents</td><td>BIGINT</td><td></td><td>Line-level promotion; <code>CHECK &ge; 0</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(sale_id, line_no) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(sale_id), IDX(product_id, sale_id), IDX(pack_size_id) &nbsp;&middot;&nbsp;
+    <b>Partition:</b> monthly, co-located with <code>sales</code>
+  </p>
+</section>
+
+<section class="tbl" id="t-payments" data-cat="d">
+  <h3>payments <span class="pill">D4</span><span class="pill">9 cols</span></h3>
+  <p class="purpose">
+    One tender against a sale. Split payments are multiple rows, which is why the amount cannot live on
+    <code>sales</code>. Negative amounts are rejected so a refund cannot be smuggled in as a payment.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>payment_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>sale_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>method_id</td><td>TINYINT UNSIGNED</td><td><span class="fk">FK</span></td><td>&rarr; payment_methods</td></tr>
+      <tr><td>amount_cents</td><td>BIGINT</td><td></td><td><code>CHECK amount_cents &gt; 0</code></td></tr>
+      <tr><td>tendered_cents</td><td>BIGINT</td><td></td><td>Cash handed over; null for card/QR</td></tr>
+      <tr><td>change_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>GREATEST(tendered_cents - amount_cents, 0)</code></td></tr>
+      <tr><td>reference</td><td>VARCHAR(64)</td><td></td><td>Terminal slip or LankaQR reference</td></tr>
+      <tr><td>received_at</td><td>DATETIME(3)</td><td></td><td>Server receipt time, for audit of offline gaps</td></tr>
+      <tr><td>shift_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Copied for the drawer report; reduces a three-table join to one</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(sale_id), IDX(method_id), IDX(shift_id)</p>
+</section>
+
+<section class="tbl" id="t-refunds" data-cat="d">
+  <h3>refunds <span class="pill">D5</span><span class="pill">12 cols</span></h3>
+  <p class="purpose">
+    Reversal of a paid sale. A refund is its own document, never a mutation of the original, so the audit
+    trail stays intact and the original invoice remains valid evidence.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>refund_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>sale_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>The sale being reversed</td></tr>
+      <tr><td>shift_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Refunds hit the drawer of the shift that pays them out</td></tr>
+      <tr><td>refund_no</td><td>BIGINT UNSIGNED</td><td><span class="uq">UQ</span></td><td>Own series, distinct from receipt numbers</td></tr>
+      <tr><td>reason_code</td><td>VARCHAR(32)</td><td></td><td><code>damaged</code>, <code>wrong_item</code>, <code>expired</code>, <code>customer_return</code></td></tr>
+      <tr><td>amount_cents</td><td>BIGINT</td><td></td><td>Asserted equal to the sum of <code>refund_lines</code></td></tr>
+      <tr><td>tax_refunded_cents</td><td>BIGINT</td><td></td><td>Reduces the VAT payable for the period</td></tr>
+      <tr><td>restock</td><td>BOOLEAN</td><td></td><td>False sends the goods to damaged, not to sellable stock</td></tr>
+      <tr><td>approved_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Supervisor, recorded separately from the cashier</td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, refund_no) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(sale_id), IDX(store_id, created_at), IDX(shift_id)</p>
+</section>
+
+<section class="tbl" id="t-refund_lines" data-cat="d">
+  <h3>refund_lines <span class="pill">D6</span><span class="pill">7 cols</span></h3>
+  <p class="purpose">
+    Partial returns, line by line. The quantity guard is enforced with <code>CHECK</code> plus a procedure
+    check against the original line, so the same unit cannot be refunded twice.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>refund_line_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>refund_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>sale_item_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Which line is being returned</td></tr>
+      <tr><td>qty</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty &gt; 0</code>; procedure asserts &le; sold &minus; already refunded</td></tr>
+      <tr><td>unit_price_cents</td><td>BIGINT</td><td></td><td>From the original line, not from today's price</td></tr>
+      <tr><td>amount_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>ROUND(qty * unit_price_cents)</code></td></tr>
+      <tr><td>condition</td><td>ENUM</td><td></td><td><code>resellable</code>, <code>damaged</code>, <code>expired</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(refund_id), IDX(sale_item_id)</p>
+</section>
+
+<!-- ============================ E ============================ -->
+<div class="cat-h" id="cat-e"><span class="badge bd-e">E</span> Shifts, Cash &amp; Receipts</div>
+<p class="cat-sub">
+  Entirely absent from the current schema, and the largest operational gap. Without a shift you cannot
+  reconcile a drawer, attribute a shortfall, or produce a Z report â€” so above one till the cash is
+  simply unaccounted for.
+</p>
+
+<section class="tbl" id="t-shifts" data-cat="e">
+  <h3>shifts <span class="pill">E1</span><span class="pill">17 cols</span></h3>
+  <p class="purpose">
+    A cashier's session on one till, from opening float to counted close. The variance columns are generated,
+    so the reported shortage is always the arithmetic of its own inputs.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>shift_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>device_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>One till, one open shift</td></tr>
+      <tr><td>cashier_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>shift_no</td><td>INT</td><td><span class="uq">UQ</span></td><td>Per device, incrementing</td></tr>
+      <tr><td>opened_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+      <tr><td>closed_at</td><td>DATETIME(3)</td><td></td><td>Null while open</td></tr>
+      <tr><td>is_open</td><td>TINYINT</td><td><span class="gn">GEN</span> <span class="ix">IDX</span></td><td><code>GENERATED ALWAYS AS (closed_at IS NULL) STORED</code>; partial-index substitute</td></tr>
+      <tr><td>opening_float_cents</td><td>BIGINT</td><td></td><td>Cash counted into the drawer at open</td></tr>
+      <tr><td>cash_sales_cents</td><td>BIGINT</td><td></td><td>Snapshot at close; rebuildable from <code>payments</code></td></tr>
+      <tr><td>cash_refunds_cents</td><td>BIGINT</td><td></td><td>Cash paid out</td></tr>
+      <tr><td>expected_cash_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>opening_float + cash_sales + cash_in - cash_out - cash_refunds</code></td></tr>
+      <tr><td>counted_cash_cents</td><td>BIGINT</td><td></td><td>Physical count at close</td></tr>
+      <tr><td>variance_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>counted_cash - expected_cash</code>; negative = short</td></tr>
+      <tr><td>opened_by_staff_id / closed_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Usually the same person; recorded separately for handovers</td></tr>
+      <tr><td>notes</td><td>VARCHAR(255)</td><td></td><td>Required when variance is non-zero</td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(device_id, shift_no), UQ(device_id, opened_at) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(store_id, opened_at), IDX(cashier_staff_id), IDX(device_id, is_open)
+  </p>
+</section>
+
+<section class="tbl" id="t-cash_movements" data-cat="e">
+  <h3>cash_movements <span class="pill">E2</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    Every non-sale change to the drawer: float top-ups, bank drops, petty cash, refund pay-outs. Keeping these
+    separate from <code>payments</code> is what makes the shift variance explainable line by line.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>cash_movement_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>shift_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>movement_type</td><td>ENUM</td><td></td><td><code>float_in</code>, <code>cash_in</code>, <code>cash_out</code>, <code>bank_drop</code>, <code>petty_cash</code>, <code>refund_payout</code></td></tr>
+      <tr><td>amount_cents</td><td>BIGINT</td><td></td><td>Signed; direction is fixed by <code>movement_type</code></td></tr>
+      <tr><td>reason</td><td>VARCHAR(190)</td><td></td><td>Mandatory for every outflow</td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(shift_id), IDX(store_id, created_at), IDX(movement_type)</p>
+</section>
+
+<section class="tbl" id="t-receipt_sequences" data-cat="e">
+  <h3>receipt_sequences <span class="pill">E3</span><span class="pill">5 cols</span></h3>
+  <p class="purpose">
+    Gapless per-device receipt numbering, replacing the single global <code>receipt_no_seq</code>. A gapless
+    series per terminal is what a VAT inspector expects, and it makes two branches' numbering independent.
+    Allocation happens inside the sale transaction under <code>SELECT &hellip; FOR UPDATE</code>.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>device_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>Series is per terminal</td></tr>
+      <tr><td>series_code</td><td>VARCHAR(8)</td><td><span class="uq">UQ</span></td><td>Printed prefix, e.g. <code>T01</code></td></tr>
+      <tr><td>next_value</td><td>BIGINT UNSIGNED</td><td></td><td>Next receipt number to issue</td></tr>
+      <tr><td>last_issued_at</td><td>DATETIME(3)</td><td></td><td>Detects a terminal that has jumped ahead</td></tr>
+      <tr><td>is_exhausted</td><td>BOOLEAN</td><td></td><td>Set when the series reaches its ceiling</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>PK:</b> device_id &nbsp;&middot;&nbsp; <b>Unique:</b> UQ(series_code) &nbsp;&middot;&nbsp; <b>FK:</b> device_id &rarr; devices</p>
+</section>
+
+<!-- ============================ F ============================ -->
+<div class="cat-h" id="cat-f"><span class="badge bd-f">F</span> Customers &amp; Credit</div>
+<p class="cat-sub">
+  Also absent today: <code>pay_method</code> includes <code>credit</code>, but <code>complete_sale()</code>
+  raises <em>&ldquo;credit sales are not available yet&rdquo;</em> and the customer dialog is a stub. A balance is
+  modelled as a ledger, not a mutable <code>balance_cents</code> column, for the same reason stock is.
+</p>
+
+<section class="tbl" id="t-customers" data-cat="f">
+  <h3>customers <span class="pill">F1</span><span class="pill">12 cols</span></h3>
+  <p class="purpose">
+    Optional record attached to a sale; walk-in customers have none. A credit limit is only meaningful with a
+    customer, so it lives here rather than on the sale.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>customer_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Customers belong to a branch</td></tr>
+      <tr><td>code</td><td>VARCHAR(24)</td><td><span class="uq">UQ</span></td><td>Short reference for the till</td></tr>
+      <tr><td>name</td><td>VARCHAR(120)</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>phone</td><td>VARCHAR(32)</td><td><span class="ix">IDX</span></td><td>Primary lookup at the counter</td></tr>
+      <tr><td>email</td><td>VARCHAR(190)</td><td></td><td>For receipt delivery, when built</td></tr>
+      <tr><td>address</td><td>VARCHAR(255)</td><td></td><td></td></tr>
+      <tr><td>credit_limit_cents</td><td>BIGINT</td><td></td><td>0 = no credit; <code>CHECK &ge; 0</code></td></tr>
+      <tr><td>credit_terms_days</td><td>SMALLINT</td><td></td><td>Due date = invoice date + terms</td></tr>
+      <tr><td>is_blocked</td><td>BOOLEAN</td><td></td><td>Stops new credit sales without deleting history</td></tr>
+      <tr><td>notes</td><td>VARCHAR(255)</td><td></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, code) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id, phone), IDX(store_id, name)</p>
+</section>
+
+<section class="tbl" id="t-customer_credit_entries" data-cat="f">
+  <h3>customer_credit_entries <span class="pill">F2</span><span class="pill">10 cols</span></h3>
+  <p class="purpose">
+    Append-only receivable ledger. A credit sale debits, a settlement credits, and the balance is always
+    <code>SUM(amount_cents)</code> â€” so a concurrent settlement cannot overwrite a concurrent sale.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>credit_entry_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>customer_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>entry_type</td><td>ENUM</td><td></td><td><code>invoice</code>, <code>settlement</code>, <code>adjustment</code>, <code>write_off</code></td></tr>
+      <tr><td>sale_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Set for <code>invoice</code></td></tr>
+      <tr><td>amount_cents</td><td>BIGINT</td><td></td><td>Signed: positive increases what the customer owes</td></tr>
+      <tr><td>due_on</td><td>DATE</td><td><span class="ix">IDX</span></td><td>Drives the ageing report</td></tr>
+      <tr><td>method_id</td><td>TINYINT UNSIGNED</td><td><span class="fk">FK</span></td><td>How a settlement was paid</td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(customer_id, created_at), IDX(store_id, due_on), IDX(sale_id)</p>
+</section>
+
+<!-- ============================ G ============================ -->
+<div class="cat-h" id="cat-g"><span class="badge bd-g">G</span> Returnable Bottles</div>
+<p class="cat-sub">
+  The glass-bottle milk rule (LKR 250 milk, LKR 100 non-return fee). The current table stores
+  <code>amount_cents</code> directly, which becomes wrong the moment the fee changes â€” a textbook update
+  anomaly. Here the fee is snapshotted per row and the amount is generated from it.
+</p>
+
+<section class="tbl" id="t-bottle_event_types" data-cat="g">
+  <h3>bottle_event_types <span class="pill">G1</span><span class="pill">4 cols</span></h3>
+  <p class="purpose">
+    Lookup for ledger event kinds, replacing the <code>bottle_event</code> enum. <code>delta_full</code> and
+    <code>delta_empty</code> let a reporting view compute bottle counts without hardcoding event names in SQL.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>event_type_id</td><td>TINYINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>code</td><td>VARCHAR(32)</td><td><span class="uq">UQ</span></td><td><code>sold</code>, <code>returned_with_purchase</code>, <code>returned_later</code>, <code>fee_charged</code>, <code>fee_waived</code>, <code>fee_refunded</code>, <code>collected_by_dairy</code></td></tr>
+      <tr><td>delta_full</td><td>SMALLINT</td><td></td><td>Effect on full bottles: sold = &minus;1, collected = 0</td></tr>
+      <tr><td>delta_empty</td><td>SMALLINT</td><td></td><td>Effect on empty bottles: returned = +1</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code)</p>
+</section>
+
+<section class="tbl" id="t-bottle_ledger" data-cat="g">
+  <h3>bottle_ledger <span class="pill">G2</span><span class="pill">10 cols</span></h3>
+  <p class="purpose">
+    Append-only bottle movement log. <code>amount_cents</code> is now generated from
+    <code>qty &times; fee_unit_cents</code>, so the fee charged always matches the fee that was in force at
+    the time of sale.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>bottle_event_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>The milk product</td></tr>
+      <tr><td>sale_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Null for a later return or a dairy collection</td></tr>
+      <tr><td>event_type_id</td><td>TINYINT UNSIGNED</td><td><span class="fk">FK</span></td><td>&rarr; bottle_event_types</td></tr>
+      <tr><td>qty</td><td>INT</td><td></td><td><code>CHECK qty &gt; 0</code></td></tr>
+      <tr><td>fee_unit_cents</td><td>BIGINT</td><td></td><td>Snapshot of the fee at the time of the event</td></tr>
+      <tr><td>amount_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>GENERATED ALWAYS AS (qty * fee_unit_cents) STORED</code></td></tr>
+      <tr><td>created_by_staff_id / created_at</td><td>BINARY(16) / DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(store_id, created_at), IDX(product_id, created_at), IDX(sale_id), IDX(event_type_id)</p>
+</section>
+
+<!-- ============================ H ============================ -->
+<div class="cat-h" id="cat-h"><span class="badge bd-h">H</span> Purchasing &amp; Receiving</div>
+<p class="cat-sub">
+  Missing entirely, despite <code>stock_move_type='purchase'</code> and a <code>product_batches</code> table
+  that nothing ever writes to. This category is what makes expiry alerts, landed cost and COGS possible.
+</p>
+
+<section class="tbl" id="t-suppliers" data-cat="h">
+  <h3>suppliers <span class="pill">H1</span><span class="pill">11 cols</span></h3>
+  <p class="purpose">
+    Who goods are bought from. A supplier can serve several branches, so the relationship is store-scoped
+    through the purchase orders rather than baked into the supplier row.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>supplier_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>code</td><td>VARCHAR(24)</td><td><span class="uq">UQ</span></td><td></td></tr>
+      <tr><td>name</td><td>VARCHAR(120)</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>contact_name</td><td>VARCHAR(120)</td><td></td><td></td></tr>
+      <tr><td>phone</td><td>VARCHAR(32)</td><td></td><td></td></tr>
+      <tr><td>email</td><td>VARCHAR(190)</td><td></td><td></td></tr>
+      <tr><td>vat_no</td><td>VARCHAR(32)</td><td></td><td>Needed to reclaim input VAT</td></tr>
+      <tr><td>payment_terms_days</td><td>SMALLINT</td><td></td><td></td></tr>
+      <tr><td>default_lead_time_days</td><td>SMALLINT</td><td></td><td>Seeds the reorder calculation</td></tr>
+      <tr><td>is_active</td><td>BOOLEAN</td><td></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(name), IDX(is_active)</p>
+</section>
+
+<section class="tbl" id="t-purchase_orders" data-cat="h">
+  <h3>purchase_orders <span class="pill">H2</span><span class="pill">15 cols</span></h3>
+  <p class="purpose">
+    A commitment to buy. Status is a lifecycle, and <code>expected_on</code> supports both recurring schedules
+    and ad-hoc orders â€” the mix the shop actually uses.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>purchase_order_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>supplier_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>po_no</td><td>VARCHAR(24)</td><td><span class="uq">UQ</span></td><td></td></tr>
+      <tr><td>status</td><td>ENUM</td><td><span class="ix">IDX</span></td><td><code>draft</code>, <code>sent</code>, <code>partial</code>, <code>received</code>, <code>cancelled</code></td></tr>
+      <tr><td>ordered_on</td><td>DATETIME(3)</td><td></td><td></td></tr>
+      <tr><td>expected_on</td><td>DATE</td><td><span class="ix">IDX</span></td><td>Purchase calendar key</td></tr>
+      <tr><td>is_recurring</td><td>BOOLEAN</td><td></td><td>Weekly dairy run vs one-off</td></tr>
+      <tr><td>recurrence_rule</td><td>VARCHAR(64)</td><td></td><td>e.g. <code>WEEKLY:MON</code>; kept as text, expanded by a job</td></tr>
+      <tr><td>subtotal_cents / tax_cents / total_cents</td><td>BIGINT</td><td></td><td>Total is asserted against the lines by the receiving procedure</td></tr>
+      <tr><td>created_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>notes</td><td>VARCHAR(255)</td><td></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, po_no) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id, status), IDX(supplier_id), IDX(expected_on)</p>
+</section>
+
+<section class="tbl" id="t-purchase_order_lines" data-cat="h">
+  <h3>purchase_order_lines <span class="pill">H3</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    What was ordered, in what quantity. <code>qty_received</code> is tracked here so a partial delivery is
+    visible without reading every receipt.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>po_line_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>purchase_order_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>qty_ordered</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty_ordered &gt; 0</code></td></tr>
+      <tr><td>qty_received</td><td>DECIMAL(12,3)</td><td></td><td>Accumulated from receipts</td></tr>
+      <tr><td>unit_cost_cents</td><td>BIGINT</td><td></td><td>Agreed price at order time</td></tr>
+      <tr><td>line_total_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>ROUND(qty_ordered * unit_cost_cents)</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(purchase_order_id), IDX(product_id), IDX(pack_size_id)</p>
+</section>
+
+<section class="tbl" id="t-goods_receipts" data-cat="h">
+  <h3>goods_receipts <span class="pill">H4</span><span class="pill">11 cols</span></h3>
+  <p class="purpose">
+    What actually arrived, which is rarely exactly what was ordered. Receiving is where batches are born and
+    where input VAT is captured.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>goods_receipt_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>purchase_order_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Null for a delivery with no prior order</td></tr>
+      <tr><td>supplier_invoice_no</td><td>VARCHAR(64)</td><td><span class="uq">UQ</span></td><td>Unique per store: prevents paying the same invoice twice</td></tr>
+      <tr><td>received_on</td><td>DATE</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>subtotal_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>input_vat_cents</td><td>BIGINT</td><td></td><td>Reclaimable VAT; feeds the tax report</td></tr>
+      <tr><td>total_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>subtotal_cents + input_vat_cents</code></td></tr>
+      <tr><td>received_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>notes</td><td>VARCHAR(255)</td><td></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, supplier_invoice_no) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id, received_on), IDX(purchase_order_id)</p>
+</section>
+
+<section class="tbl" id="t-goods_receipt_lines" data-cat="h">
+  <h3>goods_receipt_lines <span class="pill">H5</span><span class="pill">11 cols</span></h3>
+  <p class="purpose">
+    One delivered product, with the batch and expiry it arrived under. Posting these lines is what writes
+    <code>purchase</code> stock movements and creates <code>product_batches</code> rows in one transaction.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>receipt_line_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>goods_receipt_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>po_line_id</td><td>BIGINT UNSIGNED</td><td><span class="fk">FK</span></td><td>Null for an unordered delivery</td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>qty_received</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty_received &gt; 0</code></td></tr>
+      <tr><td>qty_rejected</td><td>DECIMAL(12,3)</td><td></td><td>Damaged or short; recorded, never silently dropped</td></tr>
+      <tr><td>unit_cost_cents</td><td>BIGINT</td><td></td><td>Actual cost, which may differ from the order</td></tr>
+      <tr><td>batch_no</td><td>VARCHAR(64)</td><td></td><td>Printed on the carton</td></tr>
+      <tr><td>expires_on</td><td>DATE</td><td></td><td>Creates the batch with its FEFO key</td></tr>
+      <tr><td>line_total_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>ROUND(qty_received * unit_cost_cents)</code></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(goods_receipt_id), IDX(po_line_id), IDX(product_id, expires_on)</p>
+</section>
+
+<!-- ============================ I ============================ -->
+<div class="cat-h" id="cat-i"><span class="badge bd-i">I</span> Production &amp; Packing</div>
+<p class="cat-sub">
+  The spice side: raw chilli in, dried, ground, packed into branded packets. This is what makes
+  <code>production_in</code>, <code>production_out</code> and <code>packing</code> movement types meaningful
+  instead of theory, and what yields a true cost per packet.
+</p>
+
+<section class="tbl" id="t-production_runs" data-cat="i">
+  <h3>production_runs <span class="pill">I1</span><span class="pill">15 cols</span></h3>
+  <p class="purpose">
+    One batch of manufacturing, closed as a single transaction. Yield is generated from the recorded
+    raw-in and finished-out weights, so the loss figure cannot be typed in by hand.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>production_run_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>run_no</td><td>VARCHAR(24)</td><td><span class="uq">UQ</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>The finished spice</td></tr>
+      <tr><td>status</td><td>ENUM</td><td><span class="ix">IDX</span></td><td><code>draft</code>, <code>drying</code>, <code>grinding</code>, <code>packing</code>, <code>closed</code>, <code>cancelled</code></td></tr>
+      <tr><td>started_on / closed_on</td><td>DATE</td><td></td><td></td></tr>
+      <tr><td>raw_issued_kg</td><td>DECIMAL(12,3)</td><td></td><td>Sum of <code>production_inputs</code></td></tr>
+      <tr><td>finished_kg</td><td>DECIMAL(12,3)</td><td></td><td>Sum of <code>production_outputs</code></td></tr>
+      <tr><td>yield_pct</td><td>DECIMAL(6,2)</td><td><span class="gn">GEN</span></td><td><code>ROUND(finished_kg / raw_issued_kg * 100, 2)</code></td></tr>
+      <tr><td>extra_cost_cents</td><td>BIGINT</td><td></td><td>Labour, gas, power; allocated per packet at close</td></tr>
+      <tr><td>closed_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>batch_no</td><td>VARCHAR(64)</td><td></td><td>Inherited by every pack from this run</td></tr>
+      <tr><td>notes</td><td>VARCHAR(255)</td><td></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(store_id, run_no) &nbsp;&middot;&nbsp; <b>Indexes:</b> IDX(store_id, started_on), IDX(product_id), IDX(status)</p>
+</section>
+
+<section class="tbl" id="t-production_inputs" data-cat="i">
+  <h3>production_inputs <span class="pill">I2</span><span class="pill">7 cols</span></h3>
+  <p class="purpose">
+    Raw material and packaging consumed by a run. Each row is the justification for one
+    <code>production_in</code> stock movement.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>production_input_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>production_run_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Raw chilli, or empty pouches</td></tr>
+      <tr><td>stage</td><td>ENUM</td><td></td><td><code>raw</code>, <code>packaging</code></td></tr>
+      <tr><td>qty_kg</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty_kg &gt; 0</code></td></tr>
+      <tr><td>unit_cost_cents</td><td>BIGINT</td><td></td><td>From the batch or latest purchase</td></tr>
+      <tr><td>batch_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Which lot was consumed</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(production_run_id), IDX(product_id), IDX(batch_id)</p>
+</section>
+
+<section class="tbl" id="t-production_outputs" data-cat="i">
+  <h3>production_outputs <span class="pill">I3</span><span class="pill">8 cols</span></h3>
+  <p class="purpose">
+    Finished packets, split by size. Also covers a pure packing session where bulk powder is turned into
+    branded packets outside a full production run.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>production_output_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>production_run_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Which packet size was produced</td></tr>
+      <tr><td>qty_packets</td><td>DECIMAL(12,3)</td><td></td><td><code>CHECK qty_packets &gt; 0</code></td></tr>
+      <tr><td>wastage_g</td><td>DECIMAL(12,3)</td><td></td><td>Spillage recorded, not absorbed silently</td></tr>
+      <tr><td>unit_cost_cents</td><td>BIGINT</td><td></td><td>Cost per packet after allocating the run's extra cost</td></tr>
+      <tr><td>batch_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>The batch created for these packets</td></tr>
+      <tr><td>expires_on</td><td>DATE</td><td></td><td>Manufacture date + product shelf life</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(production_run_id), IDX(pack_size_id), IDX(batch_id)</p>
+</section>
+
+<!-- ============================ J ============================ -->
+<div class="cat-h" id="cat-j"><span class="badge bd-j">J</span> Approval, Audit &amp; Alerts</div>
+<p class="cat-sub">
+  The control plane. The current version is sound in principle â€” single-use, short-lived approval tokens and
+  an append-only audit log â€” and is preserved here with one fix: notification text is no longer copied from
+  the product name.
+</p>
+
+<section class="tbl" id="t-approvals" data-cat="j">
+  <h3>approvals <span class="pill">J1</span><span class="pill">10 cols</span></h3>
+  <p class="purpose">
+    A one-shot proof that a supervisor authorised a specific action. <code>action_code</code> now references
+    <code>permissions</code>, so an approval cannot be minted for an action the system does not know about.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>approval_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td>The token itself</td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>permission_id</td><td>SMALLINT UNSIGNED</td><td><span class="fk">FK</span></td><td>What is being authorised</td></tr>
+      <tr><td>approver_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>The supervisor who scanned and typed</td></tr>
+      <tr><td>requested_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>The cashier who asked</td></tr>
+      <tr><td>device_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>A token minted on one till cannot be spent on another</td></tr>
+      <tr><td>subject_id</td><td>BINARY(16)</td><td></td><td>Optional: the sale or product the token is bound to</td></tr>
+      <tr><td>expires_at</td><td>DATETIME(3)</td><td><span class="ix">IDX</span></td><td>60 seconds from issue</td></tr>
+      <tr><td>used_at</td><td>DATETIME(3)</td><td></td><td>Single use; a second attempt fails</td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Indexes:</b> IDX(store_id, created_at), IDX(expires_at), IDX(approver_staff_id)</p>
+</section>
+
+<section class="tbl" id="t-audit_log" data-cat="j">
+  <h3>audit_log <span class="pill">J2</span><span class="pill">12 cols</span></h3>
+  <p class="purpose">
+    Append-only, immutable. <code>before_state</code> and <code>after_state</code> are JSON for opaque
+    snapshots only; anything queried is a real column. Written by every privileged procedure.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>audit_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td><code>AUTO_INCREMENT</code>; partitioned monthly</td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>action_code</td><td>VARCHAR(64)</td><td><span class="ix">IDX</span></td><td><code>line_voided</code>, <code>sale_refunded</code>, <code>price_changed</code>, <code>product_archived</code>, <code>stock_adjusted</code>, <code>approval_granted</code>, <code>approval_wrong_pin</code>, <code>till_sign_in</code></td></tr>
+      <tr><td>entity_table</td><td>VARCHAR(32)</td><td></td><td></td></tr>
+      <tr><td>entity_id</td><td>BINARY(16)</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>requested_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>approved_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td>Null when the action needed no approval</td></tr>
+      <tr><td>device_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>reason</td><td>VARCHAR(190)</td><td></td><td></td></tr>
+      <tr><td>before_state</td><td>JSON</td><td></td><td>Opaque snapshot; not queried</td></tr>
+      <tr><td>after_state</td><td>JSON</td><td></td><td>Opaque snapshot; not queried</td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td><span class="ix">IDX</span></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Indexes:</b> IDX(store_id, created_at), IDX(action_code, created_at), IDX(entity_table, entity_id) &nbsp;&middot;&nbsp;
+    <b>Rules:</b> no <code>UPDATE</code> or <code>DELETE</code> grant to any application role; partition by month
+  </p>
+</section>
+
+<section class="tbl" id="t-notification_types" data-cat="j">
+  <h3>notification_types <span class="pill">J3</span><span class="pill">4 cols</span></h3>
+  <p class="purpose">
+    Lookup for alert kinds, replacing the <code>notification_type</code> enum and pairing each type with the
+    message template the app renders.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>notification_type_id</td><td>TINYINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>code</td><td>VARCHAR(32)</td><td><span class="uq">UQ</span></td><td><code>low_stock</code>, <code>out_of_stock</code>, <code>expiry_soon</code>, <code>purchase_due</code>, <code>high_voids</code>, <code>shift_variance</code>, <code>sync_failed</code>, <code>system</code></td></tr>
+      <tr><td>severity</td><td>ENUM</td><td></td><td><code>info</code>, <code>warning</code>, <code>critical</code></td></tr>
+      <tr><td>template</td><td>VARCHAR(255)</td><td></td><td><code>{product} is running low</code>; rendered at read time</td></tr>
+    </tbody>
+  </table>
+  <p class="keys"><b>Unique:</b> UQ(code)</p>
+</section>
+
+<section class="tbl" id="t-notifications" data-cat="j">
+  <h3>notifications <span class="pill">J4</span><span class="pill">12 cols</span></h3>
+  <p class="purpose">
+    An alert instance. <code>title</code>/<code>body</code> are no longer copied product names; the row stores
+    <code>params</code> and the template renders the text, so renaming a product does not leave stale wording.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>notification_id</td><td>BIGINT UNSIGNED</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>notification_type_id</td><td>TINYINT UNSIGNED</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="ix">IDX</span></td><td>Subject, when applicable</td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>params</td><td>JSON</td><td></td><td><code>{"product":"Curry Powder","on_hand":2}</code>; rendered by the app</td></tr>
+      <tr><td>is_read</td><td>BOOLEAN</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>created_at</td><td>DATETIME(3)</td><td><span class="ix">IDX</span></td><td></td></tr>
+      <tr><td>resolved_at</td><td>DATETIME(3)</td><td><span class="gn">GEN</span></td><td>Set when the condition clears; one open alert per subject</td></tr>
+      <tr><td>resolved_by_staff_id</td><td>BINARY(16)</td><td><span class="fk">FK</span></td><td></td></tr>
+      <tr><td>delivered_email_at / delivered_push_at</td><td>DATETIME(3)</td><td></td><td>Idempotency markers for the digest job</td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Indexes:</b> IDX(store_id, is_read, created_at), IDX(product_id, pack_size_id, resolved_at),
+    IDX(notification_type_id)
+  </p>
+</section>
+
+<!-- ============================ K ============================ -->
+<div class="cat-h" id="cat-k"><span class="badge bd-k">K</span> Reporting &amp; Rollups</div>
+<p class="cat-sub">
+  <strong>Deliberately outside BCNF.</strong> These hold pre-computed aggregates so dashboards never scan
+  millions of sale lines. They are rebuilt from the normalized base tables by a scheduled job and are
+  read-only to the application â€” which is what keeps the denormalization from becoming a source of truth.
+</p>
+
+<section class="tbl" id="t-daily_sales_rollup" data-cat="k">
+  <h3>daily_sales_rollup <span class="pill">K1</span><span class="pill">14 cols</span></h3>
+  <p class="purpose">
+    One row per store, day and product. The grain is stated explicitly because a rollup's key <em>is</em> its
+    contract; anything finer belongs in <code>sale_items</code>, anything coarser in the monthly summary.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td></td></tr>
+      <tr><td>business_date</td><td>DATE</td><td><span class="pk">PK</span></td><td>Store-local date, not UTC date</td></tr>
+      <tr><td>product_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td></td></tr>
+      <tr><td>pack_size_id</td><td>BINARY(16)</td><td><span class="pk">PK</span> <span class="fk">FK</span></td><td>0-sentinel row for unit products, to keep the key non-null</td></tr>
+      <tr><td>qty_sold</td><td>DECIMAL(14,3)</td><td></td><td></td></tr>
+      <tr><td>gross_cents</td><td>BIGINT</td><td></td><td>Before discount</td></tr>
+      <tr><td>discount_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>net_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>tax_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>cogs_cents</td><td>BIGINT</td><td></td><td>From batch cost; enables margin</td></tr>
+      <tr><td>qty_refunded</td><td>DECIMAL(14,3)</td><td></td><td></td></tr>
+      <tr><td>qty_voided</td><td>DECIMAL(14,3)</td><td></td><td>Kept visible: a spike is a shrinkage signal</td></tr>
+      <tr><td>bill_count</td><td>INT</td><td></td><td>Distinct sales touching this product</td></tr>
+      <tr><td>rebuilt_at</td><td>DATETIME(3)</td><td></td><td>When the job last recomputed the row</td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>PK:</b> (store_id, business_date, product_id, pack_size_id) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(store_id, business_date), IDX(product_id, business_date) &nbsp;&middot;&nbsp;
+    <b>Rebuilt by:</b> <code>sp_rebuild_daily_rollup(date)</code>, idempotent
+  </p>
+</section>
+
+<section class="tbl" id="t-monthly_summaries" data-cat="k">
+  <h3>monthly_summaries <span class="pill">K2</span><span class="pill">16 cols</span></h3>
+  <p class="purpose">
+    The month-end document: sales, VAT collected against input VAT paid, production cost and bottle fees,
+    in one row the owner can export. Immutable once posted, because it is the basis of a tax filing.
+  </p>
+  <table class="cols">
+    <thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>summary_id</td><td>BINARY(16)</td><td><span class="pk">PK</span></td><td></td></tr>
+      <tr><td>store_id</td><td>BINARY(16)</td><td><span class="fk">FK</span> <span class="uq">UQ</span></td><td></td></tr>
+      <tr><td>period_year</td><td>SMALLINT</td><td><span class="uq">UQ</span></td><td></td></tr>
+      <tr><td>period_month</td><td>TINYINT</td><td><span class="uq">UQ</span></td><td><code>CHECK 1..12</code></td></tr>
+      <tr><td>status</td><td>ENUM</td><td><span class="ix">IDX</span></td><td><code>draft</code>, <code>posted</code>, <code>locked</code></td></tr>
+      <tr><td>gross_sales_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>discounts_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>refunds_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>net_sales_cents</td><td>BIGINT</td><td></td><td></td></tr>
+      <tr><td>output_vat_cents</td><td>BIGINT</td><td></td><td>Collected on sales</td></tr>
+      <tr><td>input_vat_cents</td><td>BIGINT</td><td></td><td>Paid on purchases</td></tr>
+      <tr><td>vat_payable_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>output_vat - input_vat</code></td></tr>
+      <tr><td>cogs_cents</td><td>BIGINT</td><td></td><td>From batches and production cost</td></tr>
+      <tr><td>gross_profit_cents</td><td>BIGINT</td><td><span class="gn">GEN</span></td><td><code>net_sales - cogs</code></td></tr>
+      <tr><td>bottle_fees_cents</td><td>BIGINT</td><td></td><td>Non-return fee income, reported separately</td></tr>
+      <tr><td>generated_at</td><td>DATETIME(3)</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="keys">
+    <b>Unique:</b> UQ(store_id, period_year, period_month) &nbsp;&middot;&nbsp;
+    <b>Indexes:</b> IDX(store_id, status) &nbsp;&middot;&nbsp;
+    <b>Rules:</b> <code>locked</code> rows are never recomputed; a correction is a new adjusting entry
+  </p>
+</section>
+
+<!-- ============================ VIEWS ============================ -->
+<section id="views">
+  <h2 class="sec">Views &mdash; where the removed derived columns went</h2>
+  <p class="purpose">
+    Seven derived relations replace the stored stock columns and the ad-hoc joins the app currently performs.
+    They are the contract for reading; the application never recomputes these numbers itself.
+  </p>
+  <table class="doc">
+    <thead><tr><th>View</th><th>Replaces</th><th>Definition (essence)</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>v_stock_levels</td>
+        <td><code>products.stock_on_hand</code>, <code>pack_sizes.packets_on_hand</code></td>
+        <td><code>SELECT store_id, product_id, pack_size_id, SUM(qty_change) AS on_hand FROM stock_movements GROUP BY â€¦</code></td>
+      </tr>
+      <tr>
+        <td>v_product_catalogue</td>
+        <td>The joined catalogue the till caches, currently assembled in <code>mappers.ts</code></td>
+        <td>products + tax rate + pack sizes + primary barcode + on-hand, one row per sellable unit</td>
+      </tr>
+      <tr>
+        <td>v_barcode_lookup</td>
+        <td>The in-memory barcode map built on every page load</td>
+        <td><code>barcode &rarr; product_id, pack_size_id, price_cents, is_active</code></td>
+      </tr>
+      <tr>
+        <td>v_low_stock</td>
+        <td>The trigger that raised <code>low_stock</code> / <code>out_of_stock</code></td>
+        <td>on-hand vs <code>reorder_level</code> per product and per pack size, with <code>days_of_cover</code></td>
+      </tr>
+      <tr>
+        <td>v_expiring_batches</td>
+        <td>Nothing â€” the alert path was never wired up</td>
+        <td>batches with <code>qty_remaining &gt; 0</code> ordered by <code>expires_on</code> (FEFO queue)</td>
+      </tr>
+      <tr>
+        <td>v_customer_balance</td>
+        <td>The unimplemented credit feature</td>
+        <td><code>SELECT customer_id, SUM(amount_cents) AS balance_cents FROM customer_credit_entries GROUP BY â€¦</code></td>
+      </tr>
+      <tr>
+        <td>v_shift_cash_summary</td>
+        <td>Nothing â€” there was no shift model</td>
+        <td>per shift: cash sales, refunds, movements in/out, expected vs counted</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <h5>Ordering of the work, if this is built</h5>
+    <p>
+      <strong>1.</strong> Category A, B and the ledger in C first â€” they are the spine.
+      <strong>2.</strong> Category D plus the sale procedure, because nothing can be sold without it.
+      <strong>3.</strong> Category E, because the moment there are two tills the cash is unaccounted for.
+      <strong>4.</strong> Then H and I, which finally populate <code>product_batches</code> and make expiry
+      alerts real. <strong>5.</strong> F, G and K follow. Building I before H produces cost figures with no
+      purchase basis behind them.
+    </p>
+  </div>
+
+  <div class="note">
+    <h5>Open questions this schema forces you to answer</h5>
+    <p>
+      <strong>Tenant isolation.</strong> With RLS gone, which of the three options in the MariaDB section do
+      you want? This determines whether the procedures are the security boundary or merely a convention.
+    </p>
+    <p>
+      <strong>Receipt numbering.</strong> Per-device gapless series is what a VAT inspector expects, but it
+      means an offline till consumes numbers it may never use if the sale is refused on sync. Accept gaps
+      (per-device <code>AUTO_INCREMENT</code>) or accept that a refused sale burns a number?
+    </p>
+    <p>
+      <strong>Late bottle returns.</strong> Still undecided in PLAN.md, and it changes
+      <code>bottle_event_types</code>: is <code>fee_refunded</code> a real event, and within what window?
+    </p>
+    <p>
+      <strong>Offline credit.</strong> Can a credit sale be written with no connection? If yes,
+      <code>customer_credit_entries</code> can briefly exceed a credit limit; if no, the till must refuse it.
+    </p>
+  </div>
+</section>
+
+
+<footer>
+  <p>
+    <strong>pos_db.html</strong> &mdash; design document only. No migrations, schema files or application code
+    were created or modified. Target: MariaDB 11.4+, InnoDB, <code>utf8mb4_uca1400_ai_ci</code>.
+    Normal form: BCNF for categories A&ndash;J; category K is a rebuildable aggregate store by design.
+  </p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var input = document.getElementById("q");
+  var count = document.getElementById("qcount");
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.tbl"));
+  var links = Array.prototype.slice.call(document.querySelectorAll(".idx-card li"));
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".idx-card"));
+
+  function norm(s) { return (s || "").toLowerCase(); }
+
+  function apply() {
+    var q = norm(input.value.trim());
+    var shown = 0;
+
+    sections.forEach(function (sec) {
+      var hay = norm(sec.textContent);
+      var match = !q || hay.indexOf(q) !== -1;
+      sec.classList.toggle("hidden", !match);
+      if (match) shown++;
+    });
+
+    links.forEach(function (li) {
+      var hay = norm(li.textContent);
+      li.style.display = !q || hay.indexOf(q) !== -1 ? "" : "none";
+    });
+
+    cards.forEach(function (card) {
+      var visible = Array.prototype.some.call(card.querySelectorAll("li"), function (li) {
+        return li.style.display !== "none";
+      });
+      card.style.display = visible ? "" : "none";
+    });
+
+    count.textContent = q ? shown + " of 50 tables" : "50 tables";
+  }
+
+  input.addEventListener("input", apply);
+  apply();
+})();
+</script>
+</body>
+</html>
+

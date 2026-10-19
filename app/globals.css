@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens (see DESIGN.md §3). Colours carry meaning; --primary is owner-changeable
+ * and written by lib/theme.ts. Light is the default; data-theme="dark" switches to dark.
+ */
+:root {
+  --bg: #faf8f5;
+  --surface: #ffffff;
+  --surface-2: #f2eee8;
+  --border: #e3ddd3;
+  --text: #1f1a14;
+  --text-muted: #6b6257;
+  --primary: #1d4ed8;
+  --primary-fg: #ffffff;
+  --primary-soft: #e3eafc;
+  --success: #15803d;
+  --success-soft: #dcf3e3;
+  --warning: #b45309;
+  --warning-soft: #fdecd0;
+  --danger: #b91c1c;
+  --danger-soft: #fbe0e0;
+  --shadow: 0 10px 40px rgba(31, 26, 20, 0.18);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #16130f;
+  --surface: #201c17;
+  --surface-2: #2a251f;
+  --border: #3a332b;
+  --text: #f3eee6;
+  --text-muted: #a89f92;
+  --primary: #6b93f5;
+  --primary-fg: #0b1020;
+  --primary-soft: #1f2a4a;
+  --success: #4ade80;
+  --success-soft: #16301f;
+  --warning: #fbbf24;
+  --warning-soft: #3a2c0c;
+  --danger: #f87171;
+  --danger-soft: #3d1a1a;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 16px;
+}
+
+/* Money and quantities line up in columns. */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus is never removed (DESIGN.md §7.3). */
+/* :where() keeps specificity at zero so a field that draws its own focus border can opt out. */
+:where(:focus-visible) {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@keyframes flash-in {
+  from {
+    background-color: var(--primary-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.flash-in {
+  animation: flash-in 0.9s ease-out;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+
+.shake {
+  animation: shake 0.25s ease-in-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pop-in {
+  animation: pop-in 0.14s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-in,
+  .shake,
+  .pop-in {
+    animation: none;
+  }
+}
+
+/* Thin scrollbars for the bill and grid. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+/* Shared form control. The till uses its own larger controls; these are for the dashboard. */
+.field {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0.5rem 0.75rem;
+  color: var(--text);
+  font-size: 0.95rem;
+  outline: none;
+}
+.field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.field::placeholder {
+  color: var(--text-muted);
+}

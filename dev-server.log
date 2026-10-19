@@ -1,0 +1,216 @@
+
+> pos-system@0.1.0 dev
+> next dev
+
+▲ Next.js 16.4.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.6:3000
+✓ Ready in 6.7s
+✓ Running next.config.ts took 560ms
+- Cache Components enabled
+- Partial Prefetching enabled
+
+○ Compiling /pos ...
+ GET /sw.js.map 404 in 4.9s (next.js: 4.6s, application-code: 356ms)
+ GET /pos 200 in 984ms (next.js: 575ms, application-code: 409ms)
+ GET /pos 200 in 77ms (next.js: 2ms, application-code: 75ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/pos" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+Route /pos is rendering with server caches disabled. For this navigation, Component Metadata in React DevTools will not accurately reflect what is statically prerenderable and runtime prefetchable. See more info here: https://nextjs.org/docs/messages/cache-bypass-in-dev
+ GET /pos 200 in 41ms (next.js: 1.7ms, application-code: 39ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/pos" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+ GET /dashboard 200 in 41ms (next.js: 10ms, application-code: 31ms)
+ GET /products 200 in 36ms (next.js: 9ms, application-code: 27ms)
+ GET /staff 200 in 50ms (next.js: 11ms, application-code: 38ms)
+ GET /dashboard 200 in 27ms (next.js: 1.6ms, application-code: 25ms)
+✓ Compiled in 38ms
+✓ Compiled in 34ms
+✓ Compiled in 86ms
+✓ Compiled in 74ms
+ GET /dashboard 200 in 64ms (next.js: 3ms, application-code: 62ms)
+ GET /dashboard 200 in 31ms (next.js: 2ms, application-code: 29ms)
+ GET /pos 200 in 70ms (next.js: 3ms, application-code: 67ms)
+ GET /dashboard 200 in 110ms (next.js: 2ms, application-code: 108ms)
+ GET /receipts 200 in 72ms (next.js: 10ms, application-code: 62ms)
+ GET /customers 200 in 72ms (next.js: 10ms, application-code: 62ms)
+ GET /products 200 in 65ms (next.js: 2.0ms, application-code: 63ms)
+Route /dashboard is rendering with server caches disabled. For this navigation, Component Metadata in React DevTools will not accurately reflect what is statically prerenderable and runtime prefetchable. See more info here: https://nextjs.org/docs/messages/cache-bypass-in-dev
+ GET /dashboard 200 in 50ms (next.js: 1.5ms, application-code: 49ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/dashboard" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+ GET /customers 200 in 25ms (next.js: 1.7ms, application-code: 23ms)
+ GET /receipts 200 in 25ms (next.js: 1.6ms, application-code: 24ms)
+ GET /customers 200 in 31ms (next.js: 4ms, application-code: 27ms)
+ GET /pos 200 in 31ms (next.js: 2ms, application-code: 28ms)
+✓ Compiled in 97ms
+ GET /pos 200 in 113ms (next.js: 4ms, application-code: 109ms)
+ GET /login 200 in 140ms (next.js: 20ms, application-code: 120ms)
+ GET /dashboard 200 in 85ms (next.js: 1.8ms, application-code: 84ms)
+ GET /customers 200 in 71ms (next.js: 2ms, application-code: 69ms)
+ GET /pos 200 in 52ms (next.js: 3ms, application-code: 49ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/pos" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+ GET /dashboard 200 in 32ms (next.js: 3ms, application-code: 29ms)
+ GET /customers 200 in 34ms (next.js: 1.5ms, application-code: 32ms)
+ GET /receipts 200 in 43ms (next.js: 3ms, application-code: 40ms)
