@@ -24,13 +24,26 @@ const METHODS: { id: PayMethod; label: string; key: string; Icon: typeof Banknot
 const NOTES = [500, 1000, 2000, 5000];
 
 export function PaymentDialog({ exact, onClose }: { exact?: boolean; onClose: () => void }) {
+  // customerId/customerName must be part of the snapshot, or buildSale records every sale as a
+  // walk-in no matter who the gate selected before the bill started.
   const snapshot = usePos(
-    useShallow((s) => ({ lines: s.lines, bottlesReturned: s.bottlesReturned, feeWaived: s.feeWaived, discount: s.discount })),
+    useShallow((s) => ({
+      lines: s.lines,
+      bottlesReturned: s.bottlesReturned,
+      feeWaived: s.feeWaived,
+      discount: s.discount,
+      customerId: s.customerId,
+      customerName: s.customerName,
+    })),
   );
   const session = usePos((s) => s.session)!;
   const notify = usePos((s) => s.notify);
   const bill = useMemo(() => computeBill(snapshot), [snapshot]);
 
+  const customerId = usePos((s) => s.customerId);
+  const customerName = usePos((s) => s.customerName);
+  const customerCredit = usePos((s) => s.customerCredit);
+  const customerLimit = usePos((s) => s.customerLimit);
   const [method, setMethod] = useState<PayMethod>("cash");
   const [typed, setTyped] = useState(exact ? formatMoney(bill.total, false).replace(/,/g, "") : "");
   const [ref, setRef] = useState("");
@@ -41,9 +54,17 @@ export function PaymentDialog({ exact, onClose }: { exact?: boolean; onClose: ()
   const short = change !== null && change < 0;
 
   function choose(m: PayMethod) {
+    // Credit is the one method the server will refuse outright if the shop is not lending to this
+    // person, so say why here rather than letting the sale fail at the end.
     if (m === "credit") {
-      notify("Customer credit accounts arrive in a later phase", "warn");
-      return;
+      if (!customerId) return notify("Choose a customer before putting a sale on a tab", "warn");
+      if (customerLimit <= 0) return notify(`${customerName} has no credit limit. Ask the owner to open a tab.`, "warn");
+      if (customerCredit + bill.total > customerLimit) {
+        return notify(
+          `${customerName} is ${formatMoney(customerCredit)} in and the limit is ${formatMoney(customerLimit)}`,
+          "warn",
+        );
+      }
     }
     setMethod(m);
   }
@@ -63,6 +84,21 @@ export function PaymentDialog({ exact, onClose }: { exact?: boolean; onClose: ()
     try {
       const { sale, change: due } = buildSale(snapshot, session, { method, tendered: tendered ?? undefined, ref: ref || undefined });
       const saved = await recordSale(sale);
+      // Capture what the customer looked like *before* this sale, so the invoice can show the
+      // change (+points, new tab) rather than only the totals after the fact.
+      if (sale.customerId) {
+        const s = usePos.getState();
+        await getDb().meta.put({
+          key: "customerSnap",
+          value: {
+            id: sale.customerId,
+            name: s.customerName,
+            points: s.customerPoints,
+            credit_balance_cents: s.customerCredit,
+            credit_limit_cents: s.customerLimit,
+          },
+        });
+      }
       if (isConnected()) nudgeSync(asSbClient(getSupabase()), getDb()); // upload soon; the sale is already safe locally
       usePos.getState().clearBill();
       playCue("done");

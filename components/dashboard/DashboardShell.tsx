@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Boxes, LayoutDashboard, LogOut, Receipt, ShoppingCart, Store, Users, UserRound } from "lucide-react";
+import { BarChart3, Boxes, LayoutDashboard, LogOut, Receipt, ShoppingCart, Store, Users, UserRound, Wallet } from "lucide-react";
 import { useShop, permissions, type Role } from "./useShop";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, needs: "viewAnalytics" as const },
   { href: "/receipts", label: "Receipts", icon: Receipt, needs: "viewAnalytics" as const },
   { href: "/customers", label: "Customers", icon: UserRound, needs: "viewAnalytics" as const },
+  { href: "/credit", label: "Credit", icon: Wallet, needs: "manageCredit" as const },
   { href: "/products", label: "Products", icon: Boxes, needs: "manageProducts" as const },
   { href: "/staff", label: "Staff", icon: Users, needs: "manageStaff" as const },
 ];

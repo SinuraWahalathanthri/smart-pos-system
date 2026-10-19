@@ -214,3 +214,166 @@ https://react.dev/link/hydration-mismatch
  GET /dashboard 200 in 32ms (next.js: 3ms, application-code: 29ms)
  GET /customers 200 in 34ms (next.js: 1.5ms, application-code: 32ms)
  GET /receipts 200 in 43ms (next.js: 3ms, application-code: 40ms)
+✓ Compiled in 76ms
+✓ Compiled in 66ms
+✓ Compiled in 96ms
+✓ Compiled in 89ms
+✓ Compiled in 48ms
+✓ Compiled in 93ms
+✓ Compiled in 145ms
+✓ Compiled in 137ms
+✓ Compiled in 126ms
+✓ Compiled in 220ms
+ GET /receipts 200 in 226ms (next.js: 73ms, application-code: 153ms)
+ GET /receipts 200 in 47ms (next.js: 3ms, application-code: 44ms)
+✓ Compiled in 106ms
+ GET /pos 200 in 64ms (next.js: 30ms, application-code: 34ms)
+ GET /dashboard 200 in 73ms (next.js: 10ms, application-code: 63ms)
+ GET /receipts 200 in 36ms (next.js: 1.7ms, application-code: 34ms)
+ GET /customers 200 in 69ms (next.js: 30ms, application-code: 39ms)
+ GET /dashboard 200 in 42ms (next.js: 3ms, application-code: 39ms)
+ GET /pos 200 in 61ms (next.js: 1.3ms, application-code: 60ms)
+ GET /dashboard 200 in 68ms (next.js: 1.3ms, application-code: 66ms)
+ GET /receipts 200 in 63ms (next.js: 1.3ms, application-code: 61ms)
+ GET /customers 200 in 51ms (next.js: 1.4ms, application-code: 49ms)
+ GET /credit 200 in 73ms (next.js: 12ms, application-code: 61ms)
+ GET /products 200 in 65ms (next.js: 5ms, application-code: 60ms)
+ GET /pos 200 in 49ms (next.js: 2ms, application-code: 46ms)
+ GET /pos 200 in 41ms (next.js: 1.3ms, application-code: 40ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/pos" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+ GET /pos 200 in 45ms (next.js: 1.6ms, application-code: 43ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/pos" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+ GET /pos 200 in 46ms (next.js: 1.8ms, application-code: 44ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/pos" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="inter_fe8b..." suppressHydrationWarning={true}>
+                          <head>
+                            <script
+                              dangerouslySetInnerHTML={{
++                               __html: "(function applyThemeFromStorage(override) {\n    const root = document.docume..."
+-                               __html: ""
+                              }}
+-                             type="text/javascript"
+-                             src="http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.j..."
+-                             charset="UTF-8"
+                            >
+                          ...
+                  ...
+ 
+✓ Compiled in 76ms
+✓ Compiled in 76ms
+✓ Compiled in 70ms
+✓ Compiled in 126ms
+ GET /pos 200 in 71ms (next.js: 3ms, application-code: 69ms)
+ GET /credit 200 in 68ms (next.js: 1.5ms, application-code: 67ms)
+ GET /dashboard 200 in 52ms (next.js: 3ms, application-code: 50ms)
+ GET /receipts 200 in 31ms (next.js: 1.7ms, application-code: 29ms)
+ GET /pos 200 in 30ms (next.js: 1.5ms, application-code: 28ms)

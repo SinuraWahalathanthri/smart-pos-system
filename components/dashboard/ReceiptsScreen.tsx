@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Receipt, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Receipt, Search } from "lucide-react";
+import { invoiceFilename, invoiceHtml, type InvoiceDoc } from "@/lib/invoice";
 import { formatMoney } from "@/lib/money";
 import { getSupabase } from "@/lib/supabase/client";
 import { DashboardShell, NotAllowed } from "./DashboardShell";
@@ -243,6 +244,9 @@ function Row({
       {open && (
         <tr className="border-t border-border bg-surface-2">
           <td colSpan={8} className="px-4 py-3">
+            <div className="mb-2 flex justify-end">
+              <InvoiceButton saleId={r.id} receiptNo={r.receipt_no} />
+            </div>
             {linesLoading ? (
               <p className="text-sm text-muted">Loading lines...</p>
             ) : lines.length === 0 ? (
@@ -280,5 +284,54 @@ function Row({
         </tr>
       )}
     </>
+  );
+}
+
+/**
+ * Download the invoice the till froze at the moment of sale.
+ *
+ * Fetched on click rather than with the list, because the document is a couple of KB each and the
+ * owner is usually only after one receipt. Served as a .html file so it opens in any browser and
+ * prints to PDF with Ctrl+P - no server-side renderer, no extra dependency, and it keeps working
+ * when the app is installed offline.
+ */
+function InvoiceButton({ saleId, receiptNo }: { saleId: string; receiptNo: number }) {
+  const [busy, setBusy] = useState(false);
+  const [missing, setMissing] = useState(false);
+  async function download() {
+    setBusy(true);
+    const { data, error } = await getSupabase().rpc("sale_invoice", { p_sale: saleId });
+    setBusy(false);
+    const inv = data as InvoiceDoc | null;
+    if (error || !inv) {
+      setMissing(true);
+      return;
+    }
+    const blob = new Blob([invoiceHtml(inv)], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = invoiceFilename(inv);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  if (missing) {
+    return (
+      <span className="text-xs text-warning">
+        Invoice for #{receiptNo} is not ready yet - it is written once the till syncs this sale.
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        void download();
+      }}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-surface"
+    >
+      <Download size={13} /> {busy ? "Preparing..." : "Download invoice"}
+    </button>
   );
 }

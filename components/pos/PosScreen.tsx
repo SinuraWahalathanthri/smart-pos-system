@@ -9,7 +9,7 @@ import { ensureSeeded, getDb } from "@/lib/data/db";
 import { formatMoney } from "@/lib/money";
 import { SHORTCUTS, shortcutForEvent } from "@/lib/shortcuts";
 import { playCue } from "@/lib/sound";
-import { usePos } from "@/lib/store";
+import { shouldOpenGate, usePos } from "@/lib/store";
 import { asSbClient, getSupabase, isConnected } from "@/lib/supabase/client";
 import { startSync } from "@/lib/sync/engine";
 import type { PackSize, Product } from "@/lib/types";
@@ -49,8 +49,8 @@ export function PosScreen() {
   const dialog = usePos((s) => s.dialog);
   const approval = usePos((s) => s.approval);
   const gating = usePos((s) => s.gating);
-  const billLines = usePos((s) => s.lines.length);
   const billCustomer = usePos((s) => s.customerId);
+  const billLineCount = usePos((s) => s.lines.length);
 
   useEffect(() => {
     void ensureSeeded();
@@ -66,17 +66,23 @@ export function PosScreen() {
   useEffect(() => {
     if (hydrated && !session) router.replace("/login");
   }, [hydrated, session, router]);
-  /**
-   * Ask who the sale is for before the first item is scanned.
-   *
-   * Guarded on the bill being empty rather than on a timer, so recalling a held bill or refreshing
-   * mid-sale never re-asks. The gate clears itself once a customer is chosen or a walk-in is
-   * accepted, and clearBill() raises it again for the next sale.
-   */
-  const gateOpen = gating && hydrated && !!session && !locked && !approval && !dialog && billLines === 0 && !billCustomer;
+  // Ask who the sale is for before the first item is scanned. See shouldOpenGate for the rule.
+  const gateOpen = shouldOpenGate({
+    gating,
+    hydrated,
+    session,
+    locked,
+    approval,
+    dialog,
+    // "a line" is all the rule needs, and subscribing to the count (not the array) avoids
+    // re-rendering on every quantity nudge.
+    lines: billLineCount ? [1] : [],
+    customerId: billCustomer,
+  });
   const finishGate = useCallback((c: CustomerCard | null) => {
     const s = usePos.getState();
-    s.attachCustomer(c ? { id: c.id, name: c.name } : null);
+    // setCustomerCard carries the points/tab/bottles the bill panel and the invoice both show.
+    s.setCustomerCard(c);
     s.setGating(false);
     if (c && c.bottles_out > 0) {
       s.notify(`${c.name} has ${c.bottles_out} bottle${c.bottles_out === 1 ? "" : "s"} to return`, "warn");

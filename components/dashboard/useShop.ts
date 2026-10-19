@@ -106,6 +106,9 @@ export function permissions(role: Role | undefined) {
     manageStaff: role === "owner",
     manageProducts: role === "owner" || role === "supervisor",
     viewAnalytics: role === "owner" || role === "supervisor",
+    // Lending money and recording repayments are owner/supervisor decisions, never a cashier's.
+    manageCredit: role === "owner" || role === "supervisor",
+    settleCredit: role === "owner" || role === "supervisor",
     useTill: true,
   };
 }

@@ -184,11 +184,12 @@ describe("complete_sale", () => {
     expect(await stockOf("Marie Biscuit")).toBe(before);
   });
 
-  it("rejects a tampered total, bad payments and credit sales", async () => {
+  it("rejects a tampered total, bad payments and an anonymous tab", async () => {
     const call = (p: unknown) => asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(p)]));
     await expect(call(salePayload({ total_cents: 100 }))).rejects.toThrow(/does not match its lines/);
     await expect(call(salePayload({ payments: [{ method: "cash", amount_cents: 1000 }] }))).rejects.toThrow(/do not add up/);
-    await expect(call(salePayload({ payments: [{ method: "credit", amount_cents: 59000 }] }))).rejects.toThrow(/credit sales are not available/);
+    // Credit is now a real method, but it still needs a customer to collect from.
+    await expect(call(salePayload({ payments: [{ method: "credit", amount_cents: 59000 }] }))).rejects.toThrow(/needs a customer/);
     await expect(
       call(salePayload({ lines: [{ product_id: ids["Marie Biscuit"], kind: "item", name: "x", qty: 2, unit_price_cents: 12000, line_total_cents: 5 }] })),
     ).rejects.toThrow(/does not match quantity/);
@@ -782,5 +783,142 @@ describe("the customer gate at the start of a bill", () => {
     await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(payload)]));
     const card = (await asUser(ids.cashier, () => rpc("customer_card", ["0772000002"]))) as { bottles_out: number };
     expect(Number(card.bottles_out)).toBe(1);
+  });
+});
+
+describe("credit accounts", () => {
+  async function withLimit(name: string, phone: string, limit: number) {
+    const made = (await asUser(ids.owner, () => rpc("add_customer", [name, phone, null]))) as { id: string };
+    await asUser(ids.owner, () => rpc("set_credit_terms", [made.id, limit, 30, false]));
+    return made.id;
+  }
+  function creditSale(customerId: string, total = 59000) {
+    return salePayload({ customer_id: customerId, subtotal_cents: total, total_cents: total, payments: [{ method: "credit", amount_cents: total }] });
+  }
+  it("refuses a tab for a customer with no limit", async () => {
+    const made = (await asUser(ids.owner, () => rpc("add_customer", ["No Limit", "0773000001", null]))) as { id: string };
+    await expect(
+      asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(made.id))])),
+    ).rejects.toThrow(/no credit limit/);
+  });
+  it("refuses a tab that would pass the limit", async () => {
+    const id = await withLimit("Tight Limit", "0773000002", 50000);
+    await expect(
+      asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id, 59000))])),
+    ).rejects.toThrow(/credit limit exceeded/);
+  });
+  it("refuses a credit sale with no customer at all", async () => {
+    await expect(
+      asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(salePayload({ payments: [{ method: "credit", amount_cents: 59000 }] }))])),
+    ).rejects.toThrow(/needs a customer/);
+  });
+  it("refuses a blocked customer", async () => {
+    const made = (await asUser(ids.owner, () => rpc("add_customer", ["Blocked", "0773000003", null]))) as { id: string };
+    await asUser(ids.owner, () => rpc("set_credit_terms", [made.id, 100000, 30, true]));
+    await expect(
+      asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(made.id))])),
+    ).rejects.toThrow(/blocked/);
+  });
+  it("puts the sale on the tab and leaves the balance outstanding", async () => {
+    const id = await withLimit("Owing Customer", "0773000004", 100000);
+    const res = (await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id))]))) as {
+      status: string; credit_balance_cents: number;
+    };
+    expect(res.status).toBe("created");
+    expect(Number(res.credit_balance_cents)).toBe(59000);
+    const [row] = await q<{ amount_cents: string; due_on: string | null }>(
+      "select amount_cents, due_on from customer_credit_entries where customer_id = $1",
+      [id],
+    );
+    expect(Number(row.amount_cents)).toBe(59000);
+    expect(row.due_on).not.toBeNull(); // 30-day terms
+  });
+  it("stops at the limit across several sales, not just one", async () => {
+    const id = await withLimit("Running Tab", "0773000005", 100000);
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id, 59000))]));
+    // 59000 + 59000 = 118000 > 100000
+    await expect(
+      asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id, 59000))])),
+    ).rejects.toThrow(/credit limit exceeded/);
+  });
+  it("reduces the balance when the tab is settled", async () => {
+    const id = await withLimit("Payer", "0773000006", 100000);
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id))]));
+    const res = (await asUser(ids.owner, () => rpc("settle_credit", [id, 20000, "cash"]))) as { balance_cents: number };
+    expect(Number(res.balance_cents)).toBe(39000);
+  });
+  it("refuses a settlement larger than the debt", async () => {
+    const id = await withLimit("Overpayer", "0773000007", 100000);
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id))]));
+    await expect(
+      asUser(ids.owner, () => rpc("settle_credit", [id, 999999, "cash"])),
+    ).rejects.toThrow(/exceeds the balance/);
+  });
+  it("refuses a cashier settling a tab", async () => {
+    const id = await withLimit("Cashier Tries", "0773000008", 100000);
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id))]));
+    await expect(
+      asUser(ids.cashier, () => rpc("settle_credit", [id, 1000, "cash"])),
+    ).rejects.toThrow(/owner or a supervisor/);
+  });
+  it("refuses a cashier opening a tab", async () => {
+    const made = (await asUser(ids.owner, () => rpc("add_customer", ["No Terms", "0773000009", null]))) as { id: string };
+    await expect(
+      asUser(ids.cashier, () => rpc("set_credit_terms", [made.id, 100000, 0, false])),
+    ).rejects.toThrow(/owner or a supervisor/);
+  });
+  it("lists who owes money, and drops them once they have paid", async () => {
+    const id = await withLimit("On The Book", "0773000010", 100000);
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id))]));
+    const book = await asUser(ids.owner, () =>
+      q<{ name: string; balance_cents: string }>("select * from public.credit_book()"),
+    );
+    expect(book.find((b) => b.name === "On The Book")).toBeTruthy();
+    await asUser(ids.owner, () => rpc("settle_credit", [id, 59000, "cash"]));
+    const after = await asUser(ids.owner, () => q<{ name: string }>("select * from public.credit_book()"));
+    expect(after.find((b) => b.name === "On The Book")).toBeUndefined();
+  });
+  it("shows the tab and limit on the gate card", async () => {
+    const id = await withLimit("Card Customer", "0773000011", 75000);
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(creditSale(id))]));
+    const card = (await asUser(ids.cashier, () => rpc("customer_card", ["0773000011"]))) as {
+      credit_balance_cents: number; credit_limit_cents: number;
+    };
+    expect(Number(card.credit_balance_cents)).toBe(59000);
+    expect(Number(card.credit_limit_cents)).toBe(75000);
+  });
+});
+describe("the invoice kept with each sale", () => {
+  it("is missing until one is attached", async () => {
+    const payload = salePayload();
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(payload)]));
+    const pending = await asUser(ids.owner, () =>
+      q<{ sales_needing_invoice: string }>("select * from public.sales_needing_invoice()"),
+    );
+    expect(pending.some((p) => p.sales_needing_invoice === payload.id)).toBe(true);
+  });
+  it("stores the document and stops asking for it", async () => {
+    const payload = salePayload();
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(payload)]));
+    await asUser(ids.owner, () => rpc("attach_invoice", [payload.id, { receiptNo: 1, total: 59000 }]));
+    const inv = (await asUser(ids.owner, () => rpc("sale_invoice", [payload.id]))) as { total: number };
+    expect(Number(inv.total)).toBe(59000);
+    const pending = await asUser(ids.owner, () => q<{ sales_needing_invoice: string }>("select * from public.sales_needing_invoice()"));
+    expect(pending.some((p) => p.sales_needing_invoice === payload.id)).toBe(false);
+  });
+  it("never overwrites an invoice that already exists", async () => {
+    const payload = salePayload();
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(payload)]));
+    await asUser(ids.owner, () => rpc("attach_invoice", [payload.id, { total: 111 }]));
+    await asUser(ids.owner, () => rpc("attach_invoice", [payload.id, { total: 999 }]));
+    const inv = (await asUser(ids.owner, () => rpc("sale_invoice", [payload.id]))) as { total: number };
+    expect(Number(inv.total)).toBe(111);
+  });
+  it("hides the invoice from a cashier", async () => {
+    const payload = salePayload();
+    await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(payload)]));
+    await asUser(ids.owner, () => rpc("attach_invoice", [payload.id, { total: 59000 }]));
+    const inv = await asUser(ids.cashier, () => rpc("sale_invoice", [payload.id]));
+    expect(inv).toBeNull();
   });
 });

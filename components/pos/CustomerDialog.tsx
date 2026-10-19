@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Phone, UserPlus, X } from "lucide-react";
 import { getSupabase, isConnected } from "@/lib/supabase/client";
-import { usePos } from "@/lib/store";
+import { usePos, type CustomerCardState } from "@/lib/store";
 import { Dialog, Button } from "../ui/Dialog";
 
 export type Customer = {
@@ -68,6 +68,9 @@ export function CustomerDialog({ onClose, onAttached }: { onClose: () => void; o
     // Ask for the live bottle count: the search result may be a moment old and it decides the fee.
     const { data } = await getSupabase().rpc("customer_bottles_outstanding", { p_customer: c.id });
     const bottles = typeof data === "number" ? data : (c.bottles_out ?? 0);
+    // Pull the tab and points as well, so a customer attached mid-bill is not shown as zero.
+    const { data: card } = await getSupabase().rpc("customer_snapshot", { p_customer: c.id });
+    usePos.getState().setCustomerCard((card as CustomerCardState | null) ?? { ...c, bottles_out: bottles });
     onAttached?.({ ...c, bottles_out: bottles });
     notify(`${c.name} attached${bottles > 0 ? ` - ${bottles} bottle${bottles === 1 ? "" : "s"} to return` : ""}`, bottles > 0 ? "warn" : "success");
     onClose();

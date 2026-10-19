@@ -16,6 +16,12 @@ export function BillPanel() {
   const lastAddedId = usePos((s) => s.lastAddedId);
   const select = usePos((s) => s.select);
   const openDialog = usePos((s) => s.openDialog);
+  const customerName = usePos((s) => s.customerName);
+  const customerId = usePos((s) => s.customerId);
+  const customerPoints = usePos((s) => s.customerPoints);
+  const customerCredit = usePos((s) => s.customerCredit);
+  const customerLimit = usePos((s) => s.customerLimit);
+  const customerBottles = usePos((s) => s.customerBottles);
 
   const bill = useMemo(
     () => computeBill({ lines, bottlesReturned, feeWaived, discount }),
@@ -40,8 +46,8 @@ export function BillPanel() {
         <div>
           <h2 className="text-xs font-bold uppercase tracking-wider text-muted">Current bill</h2>
           <p className="text-sm text-muted">
-            {itemCount} item{itemCount === 1 ? "" : "s"} · Walk-in
-            {bottlesReturned > 0 && ` · ${bottlesReturned} empty bottle${bottlesReturned > 1 ? "s" : ""} returned`}
+            {itemCount} item{itemCount === 1 ? "" : "s"} &middot; {customerName ?? "Walk-in"}
+            {bottlesReturned > 0 && ` &middot; ${bottlesReturned} empty bottle${bottlesReturned > 1 ? "s" : ""} returned`}
           </p>
         </div>
         <Button variant="ghost" className="min-h-9 shrink-0 whitespace-nowrap px-2 text-xs" onClick={() => openDialog({ type: "held" })}>
@@ -49,6 +55,21 @@ export function BillPanel() {
         </Button>
       </div>
 
+      {customerId && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-primary-soft px-4 py-2 text-xs text-primary">
+          <span className="font-semibold">{customerName}</span>
+          <span>{customerPoints} point{customerPoints === 1 ? "" : "s"}</span>
+          <span>
+            Tab {formatMoney(customerCredit)}
+            {customerLimit > 0 && ` of ${formatMoney(customerLimit)}`}
+          </span>
+          {customerBottles > 0 && (
+            <span className="font-semibold text-warning">
+              {customerBottles} bottle{customerBottles === 1 ? "" : "s"} out
+            </span>
+          )}
+        </div>
+      )}
       <div ref={listRef} className="scroll-thin min-h-0 flex-1 overflow-y-auto" aria-live="polite">
         {bill.rows.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted">

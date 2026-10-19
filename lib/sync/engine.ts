@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { PosDB } from "../data/db";
 import { isAuthError, isNetworkError, type SbClient, type SbError } from "../supabase/client";
+import { buildInvoice } from "../invoice";
 import { applyUnsyncedSales, CATALOGUE_SELECT, mapProduct, toSalePayload, type ServerProductRow } from "./mappers";
 
 /**
@@ -81,13 +82,28 @@ export async function pushPendingSales(client: SbClient, db: PosDB): Promise<Pus
     }
 
     if (!error) {
-      const receipt = (data as { receipt_no?: number | string } | null)?.receipt_no;
+      const reply = data as {
+        receipt_no?: number | string;
+        points_earned?: number;
+        credit_balance_cents?: number;
+        customer_name?: string | null;
+      } | null;
+      const receipt = reply?.receipt_no;
       await db.sales.update(sale.id, {
         syncStatus: "synced",
         serverReceiptNo: receipt === undefined ? undefined : Number(receipt),
         syncError: undefined,
       });
       result.synced += 1;
+      // The invoice is written once the server has accepted the sale, because only then are the
+      // receipt number and the customer's real points/tab known. A failure here must not undo a
+      // sale that is already safely recorded, so it is best-effort: the sale stays in
+      // sales_needing_invoice() and is retried on the next cycle.
+      try {
+        await attachInvoice(client, db, sale.id, reply ?? null);
+      } catch {
+        // retried next cycle by backfillInvoices
+      }
       continue;
     }
 
@@ -106,6 +122,68 @@ export async function pushPendingSales(client: SbClient, db: PosDB): Promise<Pus
   return result;
 }
 
+/**
+ * Write and store the frozen invoice for one sale. Uses the customer snapshot captured on the till
+ * (points/tab before the sale) plus the server's reply (points/tab after), so the document is
+ * internally consistent even if the customer shops again before the next sync.
+ */
+async function attachInvoice(
+  client: SbClient,
+  db: PosDB,
+  saleId: string,
+  reply: { points_earned?: number; credit_balance_cents?: number; customer_name?: string | null } | null,
+): Promise<void> {
+  const sale = await db.sales.get(saleId);
+  if (!sale) return;
+  const until = (await db.meta.get("till"))?.value as
+    | { store?: { name?: string; address?: string | null; phone?: string | null; vat_no?: string | null } }
+    | undefined;
+  const snap = (await db.meta.get("customerSnap"))?.value as
+    | { id: string; name?: string; phone?: string; points?: number; credit_balance_cents?: number; credit_limit_cents?: number }
+    | null
+    | undefined;
+  const customer = sale.customerId
+    ? {
+        id: sale.customerId,
+        name: reply?.customer_name ?? sale.customerName ?? snap?.name,
+        phone: snap?.id === sale.customerId ? snap.phone : undefined,
+        pointsBefore: snap?.id === sale.customerId ? (snap.points ?? 0) : 0,
+        creditBefore: snap?.id === sale.customerId ? (snap.credit_balance_cents ?? 0) : 0,
+        creditLimit: snap?.id === sale.customerId ? (snap.credit_limit_cents ?? 0) : 0,
+      }
+    : null;
+  const pointsAfter = customer ? customer.pointsBefore + (reply?.points_earned ?? 0) : 0;
+  const inv = buildInvoice(sale, {
+    shop: {
+      name: until?.store?.name ?? "Shop",
+      address: until?.store?.address ?? undefined,
+      phone: until?.store?.phone ?? undefined,
+      vatNo: until?.store?.vat_no ?? undefined,
+    },
+    customer,
+    after: customer ? { points: pointsAfter, creditCents: reply?.credit_balance_cents ?? customer.creditBefore } : null,
+  });
+  const { error } = await client.rpc("attach_invoice", { p_sale: saleId, p_invoice: inv });
+  if (error) throw Object.assign(new Error(error.message), { sb: error });
+  // Keep a local copy, so the till can reprint without the network.
+  await db.meta.put({ key: `invoice:${saleId}`, value: inv });
+}
+/** Sales the server accepted while this till was shut, plus anything missed above. */
+export async function backfillInvoices(client: SbClient, db: PosDB): Promise<number> {
+  const { data, error } = await client.rpc("sales_needing_invoice");
+  if (error) throw Object.assign(new Error(error.message), { sb: error });
+  const ids = (data ?? []) as unknown as string[];
+  let done = 0;
+  for (const id of ids) {
+    try {
+      await attachInvoice(client, db, id, null);
+      done += 1;
+    } catch {
+      // next cycle
+    }
+  }
+  return done;
+}
 let running: Promise<void> | null = null;
 let lastPullAt = 0;
 
@@ -130,6 +208,7 @@ async function cycle(client: SbClient, db: PosDB, force: boolean): Promise<void>
       return void useSync.setState({ state: "auth", message: "Till sign-in expired. Sign the till in again to sync." });
     }
 
+    await backfillInvoices(client, db).catch(() => 0);
     const due = force || pushed.synced > 0 || Date.now() - lastPullAt > CATALOGUE_EVERY_MS;
     if (due) {
       await pullTillContext(client, db);

@@ -149,7 +149,8 @@ describe("pushPendingSales", () => {
     const res = await pushPendingSales(c, db);
 
     expect(res).toEqual({ synced: 2, failed: 0, stopped: null });
-    expect(c.calls.map((x) => (x.args.p_sale as { id: string }).id)).toEqual(["a", "b"]);
+    // attach_invoice also sends p_sale, so filter to the sale uploads themselves
+    expect(c.calls.filter((x) => x.fn === "complete_sale").map((x) => (x.args.p_sale as { id: string }).id)).toEqual(["a", "b"]);
     expect(await db.sales.get("a")).toMatchObject({ syncStatus: "synced", serverReceiptNo: 5001 });
   });
 

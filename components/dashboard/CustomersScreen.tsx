@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Search, Star } from "lucide-react";
-import { formatMoney } from "@/lib/money";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Search, Star, Wallet } from "lucide-react";
+import { formatMoney, parseMoneyInput } from "@/lib/money";
 import { getSupabase } from "@/lib/supabase/client";
 import { DashboardShell, NotAllowed } from "./DashboardShell";
 import { permissions, useShop } from "./useShop";
@@ -15,6 +15,8 @@ type CustomerRow = {
   points: number;
   spend_cents: number;
   visits: number;
+  credit_balance_cents?: number;
+  credit_limit_cents?: number;
 };
 
 /**
@@ -40,6 +42,12 @@ function CustomerList() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
+  const reload = useCallback(async () => {
+    const { data, error: err } = await getSupabase().rpc("customer_directory");
+    if (err) return setError(err.message);
+    setError(null);
+    setRows((data as CustomerRow[] | null) ?? []);
+  }, []);
   useEffect(() => {
     let stale = false;
     void (async () => {
@@ -98,6 +106,7 @@ function CustomerList() {
                 <th className="px-4 py-2 text-right">Visits</th>
                 <th className="px-4 py-2 text-right">Spent</th>
                 <th className="px-4 py-2 text-right">Points</th>
+                <th className="px-4 py-2 text-right">Credit</th>
               </tr>
             </thead>
             <tbody>
@@ -113,6 +122,9 @@ function CustomerList() {
                       {r.points}
                     </span>
                   </td>
+                  <td className="px-4 py-2 text-right">
+                    <CreditCell row={r} onSaved={() => void reload()} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -120,5 +132,74 @@ function CustomerList() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A customer's tab: what they owe, and the limit the owner has set. Editing the limit is inline
+ * because setting it is the only way a customer can ever use credit, and making it a separate
+ * screen would leave new customers permanently unable to put anything on account.
+ */
+function CreditCell({ row, onSaved }: { row: CustomerRow; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [limit, setLimit] = useState(
+    row.credit_limit_cents ? formatMoney(Number(row.credit_limit_cents), false).replace(/,/g, "") : "",
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const owed = Number(row.credit_balance_cents ?? 0);
+  const cap = Number(row.credit_limit_cents ?? 0);
+  async function save() {
+    const cents = limit.trim() === "" ? 0 : parseMoneyInput(limit);
+    if (cents === null || cents < 0) return setError("Enter a limit in rupees.");
+    setBusy(true);
+    const { error: err } = await getSupabase().rpc("set_credit_terms", {
+      p_customer: row.id,
+      p_limit_cents: cents,
+      p_terms_days: 0,
+      p_blocked: false,
+    });
+    setBusy(false);
+    if (err) return setError(err.message);
+    setError(null);
+    setEditing(false);
+    onSaved();
+  }
+  if (editing) {
+    return (
+      <div className="flex items-center justify-end gap-1">
+        <input
+          autoFocus
+          className="field w-24 text-right"
+          placeholder="Limit"
+          value={limit}
+          onChange={(e) => setLimit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+        <button onClick={() => void save()} disabled={busy} className="rounded-md bg-primary px-2 py-1 text-xs text-primary-fg">
+          {busy ? <Loader2 className="animate-spin" size={12} /> : "Save"}
+        </button>
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs hover:bg-surface-2"
+      title={cap > 0 ? `${formatMoney(owed)} owed of ${formatMoney(cap)} limit` : "No credit limit set"}
+    >
+      <Wallet size={12} className={cap > 0 ? "text-primary" : "text-muted"} />
+      {cap > 0 ? (
+        <span className={owed > 0 ? "font-medium text-danger" : "text-muted"}>
+          {formatMoney(owed)} / {formatMoney(cap)}
+        </span>
+      ) : (
+        <span className="text-muted">No tab</span>
+      )}
+    </button>
   );
 }

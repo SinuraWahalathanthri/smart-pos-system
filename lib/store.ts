@@ -25,6 +25,14 @@ export type Dialog =
   | { type: "success"; sale: SaleRecord; change: Cents }
   | null;
 
+export interface CustomerCardState {
+  id: string;
+  name: string;
+  points?: number;
+  credit_balance_cents?: number;
+  credit_limit_cents?: number;
+  bottles_out?: number;
+}
 export interface Approval {
   description: string;
   resolve: (approver: SessionUser | null) => void;
@@ -48,6 +56,12 @@ interface PosState extends BillSnapshot {
   /** True while the till is asking who the next sale is for, before the bill starts. */
   gating: boolean;
   setGating: (v: boolean) => void;
+  /** Points, tab and bottles for the attached customer, shown on the bill. */
+  customerPoints: number;
+  customerCredit: number;
+  customerLimit: number;
+  customerBottles: number;
+  setCustomerCard: (c: CustomerCardState | null) => void;
 
   login: (user: SessionUser) => void;
   logout: () => void;
@@ -83,9 +97,9 @@ export const usePos = create<PosState>()(
       ...emptyBill(),
       session: null,
       locked: false,
-      // Defaults to asking; persist() overrides this with whatever the till was doing, so a reload
-      // mid-bill keeps that bill and is not re-asked. get() is not available while the store is
-      // still being created, which is why this cannot be derived from lines here.
+      // Always starts true and is never persisted, so every fresh page load asks again. A reload
+      // mid-bill is protected by PosScreen requiring an empty bill before showing the gate, not by
+      // remembering that it was dismissed.
       gating: true,
       selectedId: null,
       lastAddedId: null,
@@ -94,7 +108,7 @@ export const usePos = create<PosState>()(
       approval: null,
       toast: null,
 
-      login: (user) => set({ session: user, locked: false, gating: !get().lines.length }),
+      login: (user) => set({ session: user, locked: false, gating: true }),
       logout: () => set({ session: null, locked: false, ...emptyBill(), selectedId: null, dialog: null, gating: false }),
       setLocked: (v) => set({ locked: v, dialog: null }),
       openDialog: (d) => set({ dialog: d }),
@@ -194,9 +208,26 @@ export const usePos = create<PosState>()(
           pendingQty: 1,
           customerId: undefined,
           customerName: undefined,
+          customerPoints: 0,
+          customerCredit: 0,
+          customerLimit: 0,
+          customerBottles: 0,
           gating: true,
         }),
       setGating: (v) => set({ gating: v }),
+      customerPoints: 0,
+      customerCredit: 0,
+      customerLimit: 0,
+      customerBottles: 0,
+      setCustomerCard: (c) =>
+        set({
+          customerId: c?.id,
+          customerName: c?.name,
+          customerPoints: c?.points ?? 0,
+          customerCredit: c?.credit_balance_cents ?? 0,
+          customerLimit: c?.credit_limit_cents ?? 0,
+          customerBottles: c?.bottles_out ?? 0,
+        }),
       attachCustomer: (c) =>
         set({ customerId: c?.id, customerName: c?.name }),
       snapshot: () => {
@@ -217,6 +248,10 @@ export const usePos = create<PosState>()(
     {
       // Demo and connected tills never share a saved session or bill (different staff ids).
       name: isConnected() ? "pos-session-live" : "pos-session",
+      // v1 saved the gate's dismissed flag, which hid the customer prompt after every reload.
+      // Bumping the version runs migrate() on the state already sitting in a till's storage.
+      version: 2,
+      migrate: (persisted, version) => (version < 2 ? dropSavedGating(persisted) : persisted),
       // The signed-in user and the bill in progress survive a refresh or a power cut.
       partialize: (s) => ({
         session: s.session,
@@ -228,12 +263,58 @@ export const usePos = create<PosState>()(
         // land on the wrong person (or on nobody) after a power cut.
         customerId: s.customerId,
         customerName: s.customerName,
-        gating: s.gating,
+        customerPoints: s.customerPoints,
+        customerCredit: s.customerCredit,
+        customerLimit: s.customerLimit,
+        customerBottles: s.customerBottles,
+        // gating is deliberately NOT persisted. It describes whether the till has yet asked who
+        // this bill is for, which is a per-visit question: saving "false" would mean the gate is
+        // dismissed once and never appears again on any later reload.
       }),
     },
   ),
 );
 
 export const billTotals = (s: BillSnapshot) => computeBill(s);
+/**
+ * Remove a remembered gate dismissal from a saved till state.
+ *
+ * Older builds persisted `gating`, so a till that had once answered the customer prompt kept
+ * `gating: false` on disk and stopped asking on every later reload. Dropping the key lets the
+ * store fall back to its default, which asks. Pure, so the migration rule can be tested directly.
+ */
+export function dropSavedGating(persisted: unknown): Record<string, unknown> | null {
+  if (!persisted || typeof persisted !== "object") return null;
+  const { gating: _dropped, ...rest } = persisted as Record<string, unknown>;
+  return rest;
+}
+/**
+ * Whether the till should ask who this sale is for right now.
+ *
+ * Kept here rather than inline in PosScreen so the rule is testable: the gate is asked once per
+ * visit, and only over an empty bill. That is what stops it reappearing when the page reloads
+ * mid-sale or when a held bill is recalled - no remembered "dismissed" flag is needed.
+ */
+export function shouldOpenGate(s: {
+  gating: boolean;
+  session: unknown;
+  locked: boolean;
+  approval: unknown;
+  dialog: unknown;
+  lines: unknown[];
+  customerId?: string;
+  hydrated: boolean;
+}): boolean {
+  return (
+    s.gating &&
+    s.hydrated &&
+    !!s.session &&
+    !s.locked &&
+    !s.approval &&
+    !s.dialog &&
+    s.lines.length === 0 &&
+    !s.customerId
+  );
+}
 export const heldId = newId;
 export type { BillLine };
