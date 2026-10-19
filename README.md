@@ -40,6 +40,54 @@ npm test            # logic, sync and database tests (real migrations on an in-p
 npm run build
 ```
 
+## Desktop app (Electron)
+The same codebase also ships as an installed desktop till. The website on Vercel is unchanged: the
+desktop build is a *separate, opt-in* build of the same app, not a fork.
+```bash
+npm run desktop          # build the export, then open it in Electron
+npm run desktop:dev      # load http://localhost:3000 instead (run `npm run dev` first)
+npm run smoke:desktop    # boot the built app and check it really rendered
+npm run dist:win         # Windows installer   -> release/
+npm run dist:mac         # macOS .dmg
+npm run dist:linux       # Linux AppImage
+```
+### How the two targets coexist
+| | Website (Vercel) | Desktop |
+|---|---|---|
+| Build | `npm run build` | `BUILD_TARGET=desktop npm run build` |
+| Next config | server build, `cacheComponents` | `output: "export"`, `trailingSlash` |
+| Serves | Vercel | Electron, from files inside the app over `app://till/` |
+| Updates | on deploy | a new installer |
+`next.config.ts` branches on `BUILD_TARGET`. Vercel never sets it, so a push deploys exactly what it
+deployed before. The desktop build is only produced by `npm run dist*` and by the
+`Desktop installers` workflow, which runs on tags (`v*`) and never on ordinary pushes.
+Both talk to the *same* Supabase project and use the same login. A shop can run the website on a
+laptop and an installed till on the counter at the same time; sales from both land in the same
+tables, and `complete_sale()` ignores duplicates.
+### Why the desktop build is a static export
+A counter-side till must keep selling when the internet is down, and it cannot assume a Node server
+is running on the shop's computer. The export is served by Electron itself, so there is no server to
+start, and the existing offline machinery (IndexedDB + the sale queue in `lib/sync/`) works
+unchanged. Credentials are entered at `/setup` and stored on the device, so one installer works for
+any shop and can be re-pointed at a different project later.
+### Things worth knowing
+- **`app://till/` is a real origin.** `desktop/protocol.js` serves the export; `desktop/main.js`
+  registers the scheme as standard + secure *before* `app.ready`. Without that registration the
+  origin becomes `null`, web fonts are blocked by CORS and `fetch()` fails ΓÇö which only shows up in a
+  packaged build, so `--smoke` exists to catch exactly that.
+- **The host is fixed (`till`) on purpose.** With a standard scheme the first path segment is the
+  host, so `app://pos/` would parse as host `pos` with path `/` and every route would render the
+  home page.
+- **The installer is not code-signed.** Windows SmartScreen ("More info" ΓåÆ "Run anyway") and macOS
+  Gatekeeper (right-click ΓåÆ Open) ask once. Set `CSC_LINK` / `CSC_KEY_PASSWORD` to sign.
+- **The local database survives upgrades.** It lives in the OS user-data folder, not in the app
+  directory, and NSIS is configured not to delete it on uninstall.
+### Publishing a download
+1. Bump `version` in `package.json`.
+2. `git tag v0.1.1 && git push origin v0.1.1`.
+The workflow builds all three platforms, verifies the app boots, and attaches the installers to the
+GitHub Release for that tag. Without a tag, `workflow_dispatch` still uploads them as build
+artifacts.
 ## Backend (Supabase)
 
 `supabase/migrations/` holds the schema, row-level security and server functions (`0001`-`0011`);

@@ -11,7 +11,16 @@
     "ldd": "vitest run tests/ldd/kit.demo.test.ts --reporter=verbose",
     "mock:supabase": "node scripts/mock-supabase.mjs",
     "dev:mock": "node scripts/dev-mock.mjs",
-    "db:plan": "tsx tools/db-plan.ts"
+    "db:plan": "tsx tools/db-plan.ts",
+    "build:desktop": "cross-env BUILD_TARGET=desktop next build",
+    "desktop": "npm run build:desktop && electron .",
+    "desktop:dev": "cross-env DESKTOP_DEV=1 electron .",
+    "dist": "npm run build:desktop && electron-builder --config electron-builder.config.js",
+    "dist:win": "npm run build:desktop && electron-builder --config electron-builder.config.js --win",
+    "dist:mac": "npm run build:desktop && electron-builder --config electron-builder.config.js --mac",
+    "dist:linux": "npm run build:desktop && electron-builder --config electron-builder.config.js --linux",
+    "smoke:desktop": "electron . --smoke",
+    "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
@@ -31,12 +40,19 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "fake-indexeddb": "^6.2.5",
+    "png-to-ico": "^3.0.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.4"
-  }
+  },
+  "main": "desktop/main.js",
+  "description": "Barcode-driven point of sale for the shop: checkout, stock, purchasing and analytics.",
+  "author": "Java Institute for Advanced Technology"
 }

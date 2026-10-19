@@ -20,6 +20,9 @@
 # production
 /build
 
+# electron installers (built by `npm run dist`)
+/release/
+
 # misc
 .DS_Store
 *.pem

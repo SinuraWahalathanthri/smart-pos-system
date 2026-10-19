@@ -1,0 +1,74 @@
+/**
+ * Packaging config for the desktop till.
+ *
+ * Kept in its own file rather than inline in package.json so the web build is untouched: Vercel
+ * only ever runs `next build`, and this file is read solely by electron-builder.
+ *
+ * The app ships the static export (`out/`) plus the Electron main process. Dependencies are not
+ * bundled into the installer because the renderer is a self-contained Next export - there is no
+ * Node code at runtime except `desktop/main.js`.
+ */
+
+/** A single place to change the app identity. */
+const APP_ID = "lk.exonsoftware.spiceshop.pos";
+const PRODUCT_NAME = "Spice Shop POS";
+
+module.exports = {
+  appId: APP_ID,
+  productName: PRODUCT_NAME,
+  copyright: `Copyright © ${new Date().getFullYear()}`,
+  directories: {
+    output: "release",
+    buildResources: "desktop/build",
+  },
+  // Only the export and the main process go in. The Next source, tests and tooling stay out.
+  //
+  // `node_modules` is excluded explicitly: electron-builder otherwise copies every production
+  // dependency (sharp, wasm shims, react-dom) into the installer, but the renderer is a fully
+  // bundled Next export and desktop/main.js only requires Electron built-ins. Shipping them would
+  // add ~100 MB that never gets loaded.
+  files: ["desktop/main.js", "desktop/protocol.js", "out/**/*", "package.json", "!node_modules/**/*"],
+  // `out` is large but flat; asar keeps the file count out of the installer's way.
+  asar: true,
+  compression: "maximum",
+
+  win: {
+    target: [{ target: "nsis", arch: ["x64"] }],
+    // Placeholder icon resolution: electron-builder falls back to the Electron icon when absent,
+    // so a missing file never breaks a release build.
+    icon: "desktop/build/icon.ico",
+    artifactName: `${PRODUCT_NAME.replace(/ /g, "-")}-Setup-\${version}.\${ext}`,
+  },
+  nsis: {
+    // A shopkeeper should not have to answer installer questions.
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    shortcutName: PRODUCT_NAME,
+    // Keep the local database (IndexedDB) across upgrades; it lives in userData, not the app dir.
+    deleteAppDataOnUninstall: false,
+  },
+
+  mac: {
+    target: [{ target: "dmg", arch: ["x64", "arm64"] }],
+    category: "public.app-category.business",
+    icon: "desktop/build/icon.icns",
+    artifactName: `${PRODUCT_NAME.replace(/ /g, "-")}-\${version}-\${arch}.\${ext}`,
+  },
+  dmg: {
+    title: PRODUCT_NAME,
+  },
+
+  linux: {
+    target: [{ target: "AppImage", arch: ["x64"] }],
+    category: "Office",
+    icon: "desktop/build/icon.png",
+    artifactName: `${PRODUCT_NAME.replace(/ /g, "-")}-\${version}.\${ext}`,
+  },
+
+  // Unsigned builds warn on first launch (Windows SmartScreen, macOS Gatekeeper). Signing needs
+  // certificates that are not part of this repo, so it is left to whoever owns the shop's release.
+  forceCodeSigning: false,
+};

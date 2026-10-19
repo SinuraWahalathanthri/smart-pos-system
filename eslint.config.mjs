@@ -12,7 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Desktop output and installers.
+    "release/**",
   ]),
+  {
+    // The Electron main process is plain CommonJS run by Node, outside the Next.js bundler, so it
+    // has no ES-module build step and must use require().
+    files: ["desktop/**/*.js", "electron-builder.config.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

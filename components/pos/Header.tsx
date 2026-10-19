@@ -157,7 +157,15 @@ function StatusPill() {
 
   // What the cashier needs to know, most urgent first.
   let tone = "bg-success-soft text-success";
-  let label = online ? "Online" : "Offline";
+  // navigator.onLine is only a hint that an interface is up, not that the server is reachable. An
+  // installed till can sit on a shop network with no internet and still be "online", which would
+  // tell the cashier everything is fine while the queue grows. Once the engine has actually failed
+  // to reach the server it says so, and that verdict wins over the browser's guess.
+  // "idle" plus a completed cycle is the only evidence the server actually answered: the engine
+  // sets idle with lastSyncAt on success, and offline/auth/error when a cycle failed.
+  const reachable = sync.state === "idle" && sync.lastSyncAt !== null;
+  const certainlyOffline = !online || sync.state === "offline";
+  let label = certainlyOffline ? "Offline" : reachable ? "Online" : "Not synced yet";
   let hint = "Sales are saved on this PC first and sync when online";
   if (!isConnected()) {
     tone = "bg-surface-2 text-muted";
@@ -171,7 +179,7 @@ function StatusPill() {
     tone = "bg-warning-soft text-warning";
     label = "Sign in again";
     hint = sync.message ?? "Till sign-in expired";
-  } else if (!online || sync.state === "offline") {
+  } else if (certainlyOffline) {
     tone = "bg-warning-soft text-warning";
     label = "Offline";
     hint = "No connection. Selling continues and sales upload later.";
@@ -183,7 +191,7 @@ function StatusPill() {
     label = "Syncing…";
   }
 
-  const Icon = !online || sync.state === "offline" ? WifiOff : Wifi;
+  const Icon = certainlyOffline ? WifiOff : Wifi;
   const body = (
     <>
       <Icon size={14} />
