@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { signInStaff } from "@/lib/data/access";
 import { ensureSeeded, getDb } from "@/lib/data/db";
@@ -85,6 +86,14 @@ export function LoginForm() {
             <p className="num">Owner: code 1, PIN 9999</p>
             <p className="num">Supervisor Kamal: code 2, PIN 2222, badge text SUP-0002</p>
             <p className="num">Cashier Nimal: code 3, PIN 3333</p>
+            {/* Without this the only way to connect was knowing the /setup URL: there is no address
+                bar in the installed app, so the till was stuck in demo mode. */}
+            <p className="mt-2 border-t border-border pt-2">
+              <Link href="/setup" className="font-semibold text-primary underline-offset-2 hover:underline">
+                Connect to Supabase
+              </Link>{" "}
+              to use your shop&rsquo;s real data.
+            </p>
           </div>
         )}
       </div>

@@ -15,12 +15,59 @@
  *    so it is treated as untrusted: no nodeIntegration, no remote module, no window.open.
  */
 
-const { app, BrowserWindow, Menu, shell, session, dialog, protocol } = require("electron");
+const { app, BrowserWindow, Menu, shell, session, dialog, protocol, ipcMain } = require("electron");
 const path = require("node:path");
 const { createHandler, APP_ORIGIN } = require("./protocol");
 
 const isDev = !app.isPackaged && process.env.DESKTOP_DEV === "1";
 const DEV_URL = process.env.DESKTOP_DEV_URL || "http://localhost:3000";
+
+/**
+ * Where the window opens.
+ *
+ * `/` is the app's own router (app/page.tsx): not configured -> /setup, no session -> /login,
+ * no shop -> /onboarding, otherwise /dashboard. Loading /pos/ directly skipped all of that, which
+ * is why an unconfigured install dropped into demo mode with no way to reach the setup screen.
+ */
+const ENTRY_PATH = "/";
+
+/** Screens reachable from the menu, so the desktop app is not a dead end. */
+function goTo(pathname) {
+  if (!mainWindow) return;
+  void mainWindow.loadURL(`${APP_ORIGIN}${pathname}`);
+}
+
+/**
+ * The Supabase project this installer was built for, if any.
+ *
+ * A shop that wants the app "already connected" builds it with:
+ *
+ *   POS_SUPABASE_URL=https://xxx.supabase.co POS_SUPABASE_ANON_KEY=eyJ... npm run dist:win
+ *
+ * These values are read here, at runtime, from the environment (falling back to a resources file an
+ * administrator can drop next to the installed app). They are deliberately NOT NEXT_PUBLIC_* names:
+ * those would be inlined into the website bundle by the bundler. Reading them in the main process
+ * keeps the anon key out of any web deployment and means the same installer can still be re-pointed
+ * at another project from Database connection.
+ *
+ * The anon key is public by design - it is what every browser bundle ships - and row level security
+ * is what protects the data. It is never written into the source tree or committed.
+ */
+function readDesktopConfig() {
+  const file = path.join(process.resourcesPath ?? __dirname, "supabase.config.json");
+  let fromFile = null;
+  try {
+    fromFile = JSON.parse(require("node:fs").readFileSync(file, "utf8"));
+  } catch {
+    // No admin-supplied file: the environment is the normal path.
+  }
+  const url = String(process.env.POS_SUPABASE_URL || fromFile?.url || "").trim();
+  const anonKey = String(process.env.POS_SUPABASE_ANON_KEY || fromFile?.anonKey || "").trim();
+  if (!url || !anonKey) return null;
+  // Never let a service-role key reach the renderer; it bypasses row level security.
+  if (anonKey.startsWith("sb_secret_")) return null;
+  return { url: url.replace(/\/$/, ""), anonKey };
+}
 
 /** The static export built by `BUILD_TARGET=desktop next build`. */
 const WEB_ROOT = path.join(__dirname, "..", "out");
@@ -67,13 +114,23 @@ async function runSmokeCheck() {
           await new Promise((r) => setTimeout(r, 100));
         }
         const out = { href: location.href, text: document.body.innerText.trim().slice(0, 90) };
+        // Proves the preload bridge reached the page; null means no project was supplied.
+        out.desktopConfig = Boolean(window.posDesktop && window.posDesktop.config);
         out.indexedDb = await new Promise((resolve) => {
           try { const q = indexedDB.open("smoke", 1); q.onsuccess = () => { q.result.close(); resolve(true); }; q.onerror = () => resolve(false); }
           catch (e) { resolve(false); }
         });
         return out;
       })()`);
+      // The router picks the landing screen, so the smoke check pins the two states that matter:
+      // a configured build must never land on /setup, and an unconfigured one must never skip it.
       if (!/\/(login|setup|pos)\//.test(report.href)) failures.push(`unexpected route ${report.href}`);
+      if (report.desktopConfig && /\/setup\//.test(report.href)) {
+        failures.push("a configured build landed on /setup, so its project was not picked up");
+      }
+      if (!report.desktopConfig && /\/(pos|dashboard)\//.test(report.href)) {
+        failures.push("an unconfigured build reached the till without a database");
+      }
       if (report.text.length < 20) failures.push(`almost nothing rendered: ${JSON.stringify(report.text)}`);
       if (!report.indexedDb) failures.push("IndexedDB unavailable");
       console.log(JSON.stringify(report, null, 2));
@@ -114,6 +171,8 @@ function createWindow(show = true) {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      // Exposes exactly one read-only value (the preconfigured Supabase project) and nothing else.
+      preload: path.join(__dirname, "preload.js"),
       // Barcode scanners and the keyboard-first till both want the window focused and awake.
       backgroundThrottling: false,
       spellcheck: false,
@@ -162,7 +221,7 @@ function createWindow(show = true) {
     void mainWindow.loadURL(DEV_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    void mainWindow.loadURL(`${APP_ORIGIN}/pos/`);
+    void mainWindow.loadURL(`${APP_ORIGIN}${ENTRY_PATH}`);
   }
   return mainWindow;
 }
@@ -180,6 +239,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     protocol.handle(SCHEME, createHandler(WEB_ROOT));
+    // Answered synchronously: the preload reads it before the first paint, so the app can decide
+    // between "already connected" and "demo mode" without a flash of the wrong screen.
+    const desktopConfig = readDesktopConfig();
+    ipcMain.on("pos:config", (event) => {
+      event.returnValue = desktopConfig;
+    });
 
     // Camera-less hardware: deny device permissions the shop has no use for.
     session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
@@ -189,6 +254,16 @@ if (!app.requestSingleInstanceLock()) {
     // Menu bar would let the till reload into a blank page mid-sale; keep only what is useful.
     Menu.setApplicationMenu(
       Menu.buildFromTemplate([
+        {
+          label: "Shop",
+          submenu: [
+            // A shopkeeper on an already-configured till still needs a way back to /setup to
+            // re-point it at another project, or to fix a mistyped key. There is no address bar.
+            { label: "Database connection\u2026", accelerator: "CmdOrCtrl+,", click: () => goTo("/setup/") },
+            { label: "Dashboard", accelerator: "CmdOrCtrl+D", click: () => goTo("/dashboard/") },
+            { label: "Till", accelerator: "CmdOrCtrl+T", click: () => goTo("/pos/") },
+          ],
+        },
         {
           label: "Till",
           submenu: [

@@ -51,6 +51,30 @@ npm run dist:win         # Windows installer   -> release/
 npm run dist:mac         # macOS .dmg
 npm run dist:linux       # Linux AppImage
 ```
+### Shipping an installer that is already connected
+By default an installer starts on **Connect your database** (`/setup`): paste the project URL and the
+anon key once, and it is remembered on that machine. To hand a shopkeeper an installer that is
+connected from the first launch, supply the project when building:
+```bash
+POS_SUPABASE_URL=https://yourref.supabase.co \
+POS_SUPABASE_ANON_KEY=eyJhbGci... \
+npm run dist:win
+```
+`npm run desktop:config` (run automatically by `dist*`) turns those into
+`supabase.config.json`, which electron-builder ships as a resource. `desktop/preload.js` hands it to
+the page over a read-only bridge, and `lib/supabase/config.ts` treats it as the default. No
+`NEXT_PUBLIC_*` is used deliberately: those get inlined by the bundler and would bake one shop's
+project into the public website build. Omit both variables and you get a generic installer.
+
+The two values can come from the shell, `.env.local`, or `.env` (see `.env.example`); the shell
+wins. In CI, set the repository secrets `POS_SUPABASE_URL` and `POS_SUPABASE_ANON_KEY` and the
+`Desktop installers` workflow picks them up.
+
+Precedence, highest first: a project saved on this machine → the one shipped in the installer →
+`NEXT_PUBLIC_*` build defaults. Pressing **Disconnect** on `/setup` sticks, so a preconfigured
+installer does not silently reconnect itself. Inside the app, **Shop → Database connection…**
+(`Ctrl+,`) reaches `/setup` at any time; there is no address bar.
+
 ### How the two targets coexist
 | | Website (Vercel) | Desktop |
 |---|---|---|
@@ -69,7 +93,8 @@ A counter-side till must keep selling when the internet is down, and it cannot a
 is running on the shop's computer. The export is served by Electron itself, so there is no server to
 start, and the existing offline machinery (IndexedDB + the sale queue in `lib/sync/`) works
 unchanged. Credentials are entered at `/setup` and stored on the device, so one installer works for
-any shop and can be re-pointed at a different project later.
+any shop and can be re-pointed at a different project later. An installer built with `POS_SUPABASE_*`
+starts connected instead; see above.
 ### Things worth knowing
 - **`app://till/` is a real origin.** `desktop/protocol.js` serves the export; `desktop/main.js`
   registers the scheme as standard + secure *before* `app.ready`. Without that registration the
@@ -107,7 +132,7 @@ Data resets each run. It is a development tool, not a real server.
 
 ### Connect to a real Supabase project
 
-1. Create a project at supabase.com. Run `supabase/migrations/0001` to `0011` in order in the SQL editor
+1. Create a project at supabase.com. Run every file in `supabase/migrations` in order in the SQL editor
    (or `npx supabase link` then `npx supabase db push`).
 2. `npm run dev`, then open `/setup` and paste the project URL and the **anon** key (never the service_role
    key - the form rejects it). Credentials are stored on the device, so pointing a till at a project needs

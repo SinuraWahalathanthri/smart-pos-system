@@ -15,12 +15,13 @@
     "build:desktop": "cross-env BUILD_TARGET=desktop next build",
     "desktop": "npm run build:desktop && electron .",
     "desktop:dev": "cross-env DESKTOP_DEV=1 electron .",
-    "dist": "npm run build:desktop && electron-builder --config electron-builder.config.js",
-    "dist:win": "npm run build:desktop && electron-builder --config electron-builder.config.js --win",
-    "dist:mac": "npm run build:desktop && electron-builder --config electron-builder.config.js --mac",
-    "dist:linux": "npm run build:desktop && electron-builder --config electron-builder.config.js --linux",
+    "dist": "npm run desktop:config && npm run build:desktop && electron-builder --config electron-builder.config.js",
+    "dist:win": "npm run desktop:config && npm run build:desktop && electron-builder --config electron-builder.config.js --win",
+    "dist:mac": "npm run desktop:config && npm run build:desktop && electron-builder --config electron-builder.config.js --mac",
+    "dist:linux": "npm run desktop:config && npm run build:desktop && electron-builder --config electron-builder.config.js --linux",
     "smoke:desktop": "electron . --smoke",
-    "icons": "node scripts/build-icons.mjs"
+    "icons": "node scripts/build-icons.mjs",
+    "desktop:config": "node scripts/write-desktop-config.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

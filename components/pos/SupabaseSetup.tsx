@@ -7,6 +7,7 @@ import { SHOP_NAME } from "@/lib/config";
 import {
   clearSupabaseConfig,
   getSupabaseConfig,
+  isSupabaseConfigShipped,
   testConnection,
   validateConfig,
   type ConfigProblem,
@@ -29,12 +30,14 @@ export function SupabaseSetup({ onDone }: { onDone?: () => void }) {
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [existing, setExisting] = useState<boolean>(false);
+  const [shipped, setShipped] = useState<boolean>(false);
 
   useEffect(() => {
     const current = getSupabaseConfig();
     if (current) {
       setUrl(current.url);
       setExisting(true);
+      setShipped(isSupabaseConfigShipped());
     }
   }, []);
 
@@ -82,8 +85,14 @@ export function SupabaseSetup({ onDone }: { onDone?: () => void }) {
         <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-2xl font-bold text-primary-fg">
           {SHOP_NAME[0]}
         </span>
-        <h1 className="text-2xl font-semibold">Connect your database</h1>
-        <p className="text-sm text-muted">One time setup. Paste the details from your Supabase project.</p>
+        <h1 className="text-2xl font-semibold">{existing ? "Database connection" : "Connect your database"}</h1>
+        <p className="text-sm text-muted">
+          {shipped
+            ? "This app came pre-configured. Check it, or point it at another project."
+            : existing
+              ? "Update the project this till talks to."
+              : "One time setup. Paste the details from your Supabase project."}
+        </p>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
@@ -162,8 +171,9 @@ export function SupabaseSetup({ onDone }: { onDone?: () => void }) {
           <li>Create a project at supabase.com.</li>
           <li>
             In the SQL editor, run every file in <code className="font-mono">supabase/migrations</code> in
-            order, starting with <code className="font-mono">0001_core.sql</code> and finishing with{" "}
-            <code className="font-mono">0005_core_schema.sql</code>.
+            order, from <code className="font-mono">0001_core.sql</code> through{" "}
+            <code className="font-mono">0020_customer_directory_credit.sql</code>. New files are added as
+            the app grows, so run any that are missing rather than stopping at a fixed number.
           </li>
           <li>Come back here and paste the URL and anon key.</li>
         </ol>

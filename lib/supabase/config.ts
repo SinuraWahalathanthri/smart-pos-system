@@ -99,6 +99,25 @@ function looksLikeServiceRole(jwt: string): boolean {
   }
 }
 
+/**
+ * A Supabase project supplied by the desktop shell, if this build was made for a particular shop.
+ *
+ * Read through the preload bridge (desktop/preload.js) rather than NEXT_PUBLIC_*, so the key is not
+ * inlined into the website bundle by the bundler. Undefined in a browser.
+ */
+declare global {
+  interface Window {
+    posDesktop?: { config: SupabaseConfig | null } | null;
+  }
+}
+
+function readDesktopConfig(): SupabaseConfig | null {
+  if (typeof window === "undefined") return null;
+  const supplied = window.posDesktop?.config;
+  if (!supplied?.url || !supplied.anonKey) return null;
+  return { url: supplied.url, anonKey: supplied.anonKey };
+}
+
 function readStored(): SupabaseConfig | null {
   if (typeof window === "undefined") return null;
   try {
@@ -114,7 +133,24 @@ function readStored(): SupabaseConfig | null {
 }
 
 /**
- * The active config: what the shopkeeper saved, else the build default, else nothing.
+ * Set when the shopkeeper picked "Disconnect" on a preconfigured install. Without it the shipped
+ * project would come straight back and the button would look broken.
+ */
+const DISABLED_KEY = "pos.supabase.disabled";
+
+function isDisabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(DISABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The active config: what the shopkeeper saved, else the desktop-supplied project, else the build
+ * default, else nothing. Saved settings win so an installer can always be re-pointed on the machine
+ * without a rebuild; the desktop project is next because it is the reason this copy was installed.
  * Returns null when the app should run in demo mode on local data.
  */
 export function getSupabaseConfig(): SupabaseConfig | null {
@@ -123,6 +159,13 @@ export function getSupabaseConfig(): SupabaseConfig | null {
   if (stored) {
     cached = stored;
     return cached;
+  }
+  if (!isDisabled()) {
+    const desktop = readDesktopConfig();
+    if (desktop) {
+      cached = desktop;
+      return cached;
+    }
   }
   const fallback = BUILD_DEFAULTS.url && BUILD_DEFAULTS.anonKey ? BUILD_DEFAULTS : null;
   cached = fallback;
@@ -134,16 +177,28 @@ export function hasSupabaseConfig(): boolean {
   return getSupabaseConfig() !== null;
 }
 
+/**
+ * True when the active config came from the installer rather than from this device. Lets setup say
+ * "this build was made for <project>" and explains why Disconnect is being offered on a fresh till.
+ */
+export function isSupabaseConfigShipped(): boolean {
+  return !readStored() && !isDisabled() && readDesktopConfig() !== null;
+}
+
 export function saveSupabaseConfig(config: SupabaseConfig): void {
   if (typeof window === "undefined") return;
   const clean = { url: config.url.trim().replace(/\/$/, ""), anonKey: config.anonKey.trim() };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
+  // An explicit save re-enables a project that was disconnected earlier.
+  window.localStorage.removeItem(DISABLED_KEY);
   cached = clean;
 }
 
 export function clearSupabaseConfig(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(STORAGE_KEY);
+  // Remember the choice, otherwise a preconfigured installer would restore its project instantly.
+  window.localStorage.setItem(DISABLED_KEY, "1");
   cached = BUILD_DEFAULTS.url && BUILD_DEFAULTS.anonKey ? BUILD_DEFAULTS : null;
 }
 

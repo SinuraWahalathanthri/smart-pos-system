@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Desktop builds: a preconfigured Supabase project written by `npm run desktop:config`.
+# Contains the shop's anon key (public, but machine-specific), so it must never be committed.
+supabase.config.json

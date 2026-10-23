@@ -45,6 +45,15 @@ function resolveFile(root, urlPath) {
   const candidates = [rel];
   if (!path.extname(rel)) candidates.push(`${rel}.html`, `${rel}/index.html`);
 
+  // Next 16 requests RSC payloads as `__next.<route>.<segment>.txt` but stores them one level
+  // deeper: `__next.<route>/<segment>.txt`. Without this, every prefetch for a nested route
+  // segment 404s and client-side navigation silently degrades to a full page load.
+  if (rel.endsWith(".txt")) {
+    const stem = rel.slice(0, -".txt".length);
+    const cut = stem.lastIndexOf(".");
+    if (cut > 0) candidates.push(`${stem.slice(0, cut)}/${stem.slice(cut + 1)}.txt`);
+  }
+
   const base = path.resolve(root);
   for (const candidate of candidates) {
     const full = path.resolve(base, candidate);

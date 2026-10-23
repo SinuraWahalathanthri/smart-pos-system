@@ -3,6 +3,7 @@ import {
   clearSupabaseConfig,
   getSupabaseConfig,
   hasSupabaseConfig,
+  isSupabaseConfigShipped,
   resetConfigCache,
   saveSupabaseConfig,
   testConnection,
@@ -129,6 +130,53 @@ describe("persistence", () => {
   });
 });
 
+describe("desktop-supplied project", () => {
+  // A preconfigured installer hands the project over through the preload bridge, not through
+  // NEXT_PUBLIC_* (which the bundler would bake into the website). These cover the precedence rules
+  // that decide whether the till starts connected or in demo mode.
+  const SHIPPED = { url: "https://shipped1234.supabase.co", anonKey: ANON };
+  function withDesktop(config: { url: string; anonKey: string } | null) {
+    vi.stubGlobal("window", { localStorage: storage, posDesktop: { config } });
+    resetConfigCache();
+  }
+  it("starts connected when the installer supplies a project", () => {
+    withDesktop(SHIPPED);
+    expect(getSupabaseConfig()).toEqual(SHIPPED);
+    expect(hasSupabaseConfig()).toBe(true);
+    expect(isSupabaseConfigShipped()).toBe(true);
+  });
+  it("lets a project saved on this device win over the shipped one", () => {
+    withDesktop(SHIPPED);
+    saveSupabaseConfig({ url: URL_OK, anonKey: ANON });
+    resetConfigCache();
+    expect(getSupabaseConfig()).toEqual({ url: URL_OK, anonKey: ANON });
+    expect(isSupabaseConfigShipped()).toBe(false);
+  });
+  it("stays disconnected after Disconnect is pressed, instead of restoring the shipped project", () => {
+    withDesktop(SHIPPED);
+    clearSupabaseConfig();
+    resetConfigCache();
+    expect(getSupabaseConfig()).toBeNull();
+    expect(hasSupabaseConfig()).toBe(false);
+    expect(isSupabaseConfigShipped()).toBe(false);
+  });
+  it("re-connects once a project is saved again after disconnecting", () => {
+    withDesktop(SHIPPED);
+    clearSupabaseConfig();
+    saveSupabaseConfig({ url: URL_OK, anonKey: ANON });
+    resetConfigCache();
+    expect(getSupabaseConfig()).toEqual({ url: URL_OK, anonKey: ANON });
+  });
+  it("ignores an incomplete bridge payload", () => {
+    withDesktop({ url: SHIPPED.url, anonKey: "" });
+    expect(getSupabaseConfig()).toBeNull();
+  });
+  it("is inert in a browser, where there is no bridge", () => {
+    resetConfigCache();
+    expect(getSupabaseConfig()).toBeNull();
+    expect(isSupabaseConfigShipped()).toBe(false);
+  });
+});
 describe("connection test", () => {
   it("refuses to call the network with invalid input", async () => {
     const fetchSpy = vi.fn();
