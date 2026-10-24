@@ -79,6 +79,17 @@ types emitted into `.next/types`; without a prior `next build`, tsc reports
 `Cannot find name 'LayoutProps'`. Run `npm run build` before typechecking in a
 clean environment.
 
+**Never use `window.prompt`, `window.alert` or `window.confirm`.** The app runs
+both in a browser and in Electron (`desktop/`), and Electron's renderer does not
+implement `prompt()` at all - it returns `null` immediately without drawing
+anything. A feature built on it therefore works in dev and silently does nothing
+in the packaged till, which is the worst possible failure mode. `alert` and
+`confirm` are implemented but still block the renderer, so use `components/ui/
+Dialog.tsx` for all three. The staff PIN reset is the cautionary example.
+
+Verify UI that touches browser-only APIs in the desktop build, not just
+`localhost:3000`.
+
 ## Finance (0021-0024, `lib/finance.ts`, `components/dashboard/finance/`)
 
 **Purchases are not expenses.** A supplier bill creates a payable and capitalises stock; the cost only

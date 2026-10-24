@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, UserX, KeyRound } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
+import { Button, Dialog } from "../ui/Dialog";
 import { DashboardShell, NotAllowed } from "./DashboardShell";
+import { isValidPin, sanitisePin } from "@/lib/pin";
 import { permissions, useShop, type Role } from "./useShop";
 
 type StaffRow = {
@@ -40,6 +42,7 @@ function StaffList() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [pinFor, setPinFor] = useState<StaffRow | null>(null);
 
   async function load() {
     setLoading(true);
@@ -89,6 +92,18 @@ function StaffList() {
 
       {message && <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">{message}</p>}
       {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+
+      {pinFor && (
+        <SetPinDialog
+          staff={pinFor}
+          serverError={error}
+          onClose={() => setPinFor(null)}
+          onSubmit={async (pin) => {
+            const ok = await call("set_staff_pin", { p_staff_id: pinFor.id, p_pin: pin }, "PIN updated.");
+            if (ok) setPinFor(null);
+          }}
+        />
+      )}
 
       {adding && (
         <AddStaffForm
@@ -151,10 +166,7 @@ function StaffList() {
                       <button
                         title="Reset PIN"
                         disabled={busy}
-                        onClick={() => {
-                          const pin = window.prompt(`New PIN for ${r.full_name} (4-8 digits)`);
-                          if (pin) void call("set_staff_pin", { p_staff_id: r.id, p_pin: pin }, "PIN updated.");
-                        }}
+                        onClick={() => setPinFor(r)}
                         className="rounded-lg p-2 text-muted hover:bg-surface-2"
                       >
                         <KeyRound size={16} />
@@ -187,6 +199,125 @@ function StaffList() {
   );
 }
 
+/**
+ * Reset one person's till PIN.
+ *
+ * A real dialog rather than `window.prompt`: Electron does not implement `prompt()` at all, so it
+ * returns null without showing anything and the button silently did nothing in the desktop app.
+ * The validation mirrors `set_staff_pin` (4-8 digits) so a bad PIN is caught before the round trip.
+ *
+ * Errors are shown here, not in the page banner behind the overlay - a failed save that appears to do
+ * nothing is what the operator would otherwise see.
+ */
+function SetPinDialog({
+  staff,
+  serverError,
+  onClose,
+  onSubmit,
+}: {
+  staff: StaffRow;
+  /** Failure from the RPC. Passed in because the page banner sits behind this overlay. */
+  serverError: string | null;
+  onClose: () => void;
+  onSubmit: (pin: string) => void | Promise<void>;
+}) {
+  const [pin, setPin] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const valid = isValidPin(pin);
+  const matches = pin === confirm;
+
+  async function submit() {
+    if (!valid) {
+      setErr("The PIN must be 4 to 8 digits.");
+      return;
+    }
+    if (!matches) {
+      setErr("The two PINs do not match.");
+      return;
+    }
+    setErr(null);
+    setSaving(true);
+    await onSubmit(pin);
+    setSaving(false);
+  }
+
+  return (
+    <Dialog
+      title={`Set PIN for ${staff.full_name}`}
+      onClose={onClose}
+      width="max-w-sm"
+      onConfirm={() => void submit()}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={saving || !valid || !matches}>
+            {saving ? <Loader2 className="animate-spin" size={15} /> : <KeyRound size={15} />} Set PIN
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-muted">
+          {staff.full_name} signs in at the till with code <span className="font-mono">{staff.staff_code}</span>.
+          Setting a PIN also clears any lockout from failed attempts.
+        </p>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">New PIN</span>
+          <input
+            className="field font-mono"
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            data-autofocus
+            value={pin}
+            onChange={(e) => {
+              setPin(sanitisePin(e.target.value));
+              setErr(null);
+            }}
+            placeholder="4-8 digits"
+            maxLength={8}
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Confirm PIN</span>
+          <input
+            className="field font-mono"
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => {
+              setConfirm(sanitisePin(e.target.value));
+              setErr(null);
+            }}
+            placeholder="Type it again"
+            maxLength={8}
+          />
+        </label>
+
+        {confirm.length > 0 && !matches && <p className="text-xs text-danger">The two PINs do not match.</p>}
+        {err && (
+          <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>
+        )}
+        {serverError && (
+          <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+            {serverError}
+          </p>
+        )}
+
+        <p className="text-xs text-muted">The PIN is hashed on the server and cannot be read back.</p>
+      </div>
+    </Dialog>
+  );
+}
+
 function AddStaffForm({
   onCreate,
   onCancel,
@@ -197,7 +328,7 @@ function AddStaffForm({
   busy: boolean;
 }) {
   const [form, setForm] = useState({ name: "", code: "", role: "cashier" as Role, pin: "" });
-  const valid = form.name.trim() && form.code.trim() && /^[0-9]{4,8}$/.test(form.pin);
+  const valid = form.name.trim() && form.code.trim() && isValidPin(form.pin);
 
   return (
     <form
@@ -246,7 +377,7 @@ function AddStaffForm({
             type="password"
             inputMode="numeric"
             value={form.pin}
-            onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, "") }))}
+            onChange={(e) => setForm((f) => ({ ...f, pin: sanitisePin(e.target.value) }))}
             placeholder="4-8 digits"
             maxLength={8}
           />
