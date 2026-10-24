@@ -6,6 +6,7 @@ offline selling, and a Supabase backend.
 
 - **[PLAN.md](PLAN.md)** — what the system does and the build phases
 - **[DESIGN.md](DESIGN.md)** — look, layout and interaction rules
+- **[OPERATIONS.md](OPERATIONS.md)** — the manual for shop staff: shifts, emergencies, month-end
 
 ## Run it
 

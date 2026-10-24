@@ -55,4 +55,73 @@ UPDATE. Opening stock goes through `stock_movements` with type `opening` - `save
 from the `opening_stock` key. Any new screen that sets stock must do the same.
 **Analytics hide cost, not just the button.** `product_analytics()` returns null `cost_cents` and
 `margin_cents` for a supervisor, so the number never reaches the browser.
+
+## Toolchain
+
+**Next.js is pinned exactly (no `^`)**. `next` and `eslint-config-next` must
+always carry the same version. Security patches have arrived as patch releases
+on the current minor (16.4.0 -> 16.4.1 for two critical RCEs), so check
+`npm audit` before assuming a major bump is needed.
+
+**`next build` fails once on a vulnerable version, then continues on retry.**
+That first exit 1 is an advisory gate, not a compile error. Do not "fix" it by
+pinning an older version.
+
+**Line endings are a trap.** `core.autocrlf=true` and no `.gitattributes`, but
+`tests/schema.test.ts` compares a generated file byte-for-byte. A fresh clone
+or worktree gets CRLF and that test fails with a whole-file diff that looks
+like schema drift but is not. Normalise `supabase/design/0005_core_schema.sql`
+to LF before trusting a schema failure in a new checkout. A `.gitattributes`
+pinning `*.sql text eol=lf` would remove the trap for good.
+
+**`tsc --noEmit` needs a build first.** `LayoutProps` and friends are ambient
+types emitted into `.next/types`; without a prior `next build`, tsc reports
+`Cannot find name 'LayoutProps'`. Run `npm run build` before typechecking in a
+clean environment.
+
+## Finance (0021-0024, `lib/finance.ts`, `components/dashboard/finance/`)
+
+**Purchases are not expenses.** A supplier bill creates a payable and capitalises stock; the cost only
+reaches `finance_summary` as COGS when the goods sell. Never add `purchases_cents` into
+`operating_expenses_cents` - that double-counts stock and makes a month with a big delivery look like
+a loss. `capital_expenses_cents` is likewise excluded from net profit, on purpose.
+
+**The profit identity is tested, not assumed.** `net_sales = gross - discounts - refunds`,
+`gross_profit = net_sales - cogs`, `net_profit = gross_profit - operating_expenses`. If you change
+one side of any of these, run `tests/finance.test.ts` before anything else.
+
+**A loss is a negative number.** Nothing is clamped to zero. A product sold below cost keeps its
+negative margin, and `is_below_cost` is a separate flag rather than `margin_pct < 0`, because a
+negative margin also happens on a discount that was deliberate.
+
+**Expenses are voided, never deleted.** `voided_at` is set with a reason and every report filters it
+out. There is no delete grant. A trigger also blocks UPDATE of a paid amount once payments exist,
+so the recorded money cannot contradict the payments ledger.
+
+**Refunds land in their own period.** `refund_sale()` writes to `refunds`/`refund_lines` dated when
+the money went back. It never rewrites the original sale, so a closed month stays closed - which is
+what makes the month-by-month comparison trustworthy.
+
+**Cost is snapshotted at sale time.** `sale_items.cost_cents` is captured by `complete_sale()`.
+Changing a cost later (`set_product_cost`) affects future sales only. This is why a cost change
+requires a reason and is written to `product_cost_history` + `audit_log`.
+
+**No VAT rate is hardcoded.** `finance_settings.vat_rate_pct` starts at 0 and `tax_summary()` reports
+a *difference*, not a liability - whether it is payable depends on rules the app does not encode.
+`save_finance_settings()` is owner-only. Do not "fix" the wording to say "VAT payable".
+
+**Alerts are questions, not findings.** `finance_alerts()` returns `severity = 'review'` only. Nothing
+blocks, reverses or accuses. Keep it that way: a large bill in a busy week looks exactly like a
+mistake to a pattern matcher.
+
+**The audit trail is append-only** (`audit_log`, no UPDATE/DELETE grant, owner-read only). `audit_trail()`
+and `audit_actions()` are the only way the UI reads it.
+
+**Expense categories are seeded by a trigger** on `stores` insert (`seed_expense_categories_for`),
+not on first use. Seeding on demand left the suggestion list empty the first time the form opened.
+
+**Money never leaves as a float.** All amounts are `bigint` cents, rendered by `formatMoney`, and
+exported as a decimal string by `centsToDecimal`. CSV cells are prefixed with `'` when they start
+with `= + - @` (spreadsheet injection).
+
 Scratch-file discipline: put temporary scripts outside the repo, or delete them in the same command.

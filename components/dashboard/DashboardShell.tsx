@@ -2,17 +2,155 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Boxes, LayoutDashboard, LogOut, Receipt, ShoppingCart, Store, Users, UserRound, Wallet } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  BarChart3,
+  Boxes,
+  ClipboardCheck,
+  Factory,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Receipt,
+  ReceiptText,
+  ShieldCheck,
+  ShoppingCart,
+  Store,
+  TrendingUp,
+  Truck,
+  Users,
+  UserRound,
+  Wallet,
+  X,
+} from "lucide-react";
 import { useShop, permissions, type Role } from "./useShop";
 
-const NAV = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, needs: "viewAnalytics" as const },
-  { href: "/receipts", label: "Receipts", icon: Receipt, needs: "viewAnalytics" as const },
-  { href: "/customers", label: "Customers", icon: UserRound, needs: "viewAnalytics" as const },
-  { href: "/credit", label: "Credit", icon: Wallet, needs: "manageCredit" as const },
-  { href: "/products", label: "Products", icon: Boxes, needs: "manageProducts" as const },
-  { href: "/staff", label: "Staff", icon: Users, needs: "manageStaff" as const },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof Boxes;
+  needs: keyof ReturnType<typeof permissions>;
+  /** Kept in the header; everything else lives in the menu. */
+  primary?: boolean;
+};
+
+/**
+ * The dashboard navigation, grouped so the list stays readable as the back office grows.
+ *
+ * A group whose items are all hidden by role disappears entirely rather than leaving an empty heading.
+ * The filtering is cosmetic; every RPC checks the role again.
+ */
+const NAV: { group: string; items: NavItem[] }[] = [
+  {
+    group: "Shop",
+    items: [
+      { href: "/dashboard", label: "Overview", icon: LayoutDashboard, needs: "viewAnalytics", primary: true },
+      { href: "/receipts", label: "Receipts", icon: Receipt, needs: "viewAnalytics" },
+      { href: "/customers", label: "Customers", icon: UserRound, needs: "viewAnalytics", primary: true },
+      { href: "/credit", label: "Credit", icon: Wallet, needs: "manageCredit" },
+    ],
+  },
+  {
+    group: "Stock",
+    items: [
+      { href: "/products", label: "Products", icon: Boxes, needs: "manageProducts", primary: true },
+      { href: "/production", label: "Production", icon: Factory, needs: "viewAnalytics" },
+      { href: "/purchases", label: "Purchases", icon: Truck, needs: "viewAnalytics" },
+    ],
+  },
+  {
+    group: "Money",
+    items: [
+      { href: "/finance", label: "Finance", icon: TrendingUp, needs: "viewAnalytics", primary: true },
+      { href: "/expenses", label: "Expenses", icon: ReceiptText, needs: "viewAnalytics" },
+      { href: "/profitability", label: "Profitability", icon: BarChart3, needs: "viewAnalytics" },
+      { href: "/tax", label: "Tax", icon: ClipboardCheck, needs: "viewAnalytics" },
+    ],
+  },
+  {
+    group: "Admin",
+    items: [
+      { href: "/staff", label: "Staff", icon: Users, needs: "manageStaff" },
+      { href: "/audit", label: "Audit", icon: ShieldCheck, needs: "viewAudit" },
+    ],
+  },
 ];
+
+/** The full, role-filtered menu, grouped. A group with nothing left to show is dropped. */
+function useVisibleNav(can: ReturnType<typeof permissions>) {
+  return NAV.map(({ group, items }) => ({ group, items: items.filter((n) => can[n.needs]) })).filter(
+    (g) => g.items.length > 0,
+  );
+}
+
+/**
+ * Every screen the role may use, grouped. The header only carries the few `primary` ones, so the
+ * back office stays legible as screens are added.
+ */
+function NavMenu({ groups }: { groups: ReturnType<typeof useVisibleNav> }) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  // Following a link leaves the menu behind, otherwise it hides the screen just opened.
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label={open ? "Close menu" : "Menu"}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-text"
+      >
+        {open ? <X size={18} /> : <Menu size={18} />}
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="pop-in absolute right-0 top-full z-30 mt-2 max-h-[80vh] w-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-[var(--shadow)]"
+        >
+          {groups.map(({ group, items }) => (
+            <div key={group} className="mb-1 last:mb-0">
+              <p className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted">{group}</p>
+              {items.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${
+                    pathname === href ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2"
+                  }`}
+                >
+                  <Icon size={15} />
+                  {label}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * The frame around every dashboard screen.
@@ -26,6 +164,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { ctx, loading, error, signOut, switchStore } = useShop();
   const role = ctx?.role;
   const can = permissions(role);
+  const groups = useVisibleNav(can);
 
   if (loading) {
     return <Centered>Loading your shop...</Centered>;
@@ -71,20 +210,26 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </select>
           )}
 
-          <nav className="flex flex-1 items-center gap-1">
-            {NAV.filter((n) => can[n.needs]).map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                  pathname === href ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2"
-                }`}
-              >
-                <Icon size={16} />
-                {label}
-              </Link>
-            ))}
+          <nav className="flex flex-1 flex-wrap items-center gap-1">
+            {groups.map(({ items }) => {
+              const shown = items.filter((n) => n.primary);
+              if (shown.length === 0) return null;
+              return shown.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm ${
+                    pathname === href ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2"
+                  }`}
+                >
+                  <Icon size={15} />
+                  {label}
+                </Link>
+              ));
+            })}
           </nav>
+
+          <NavMenu groups={groups} />
 
           <button
             onClick={() => router.push("/pos")}

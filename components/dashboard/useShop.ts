@@ -109,6 +109,12 @@ export function permissions(role: Role | undefined) {
     // Lending money and recording repayments are owner/supervisor decisions, never a cashier's.
     manageCredit: role === "owner" || role === "supervisor",
     settleCredit: role === "owner" || role === "supervisor",
+    // The audit trail is the owner's alone, matching 0002's audit_read policy. A supervisor reading
+    // it would be able to see what the owner changed, which is not a supervisor's business.
+    viewAudit: role === "owner",
+    // Setting costs and the VAT rate changes what every report says, so it is owner-only. The RPCs
+    // refuse a supervisor regardless of what this returns.
+    manageFinanceSettings: role === "owner",
     useTill: true,
   };
 }
