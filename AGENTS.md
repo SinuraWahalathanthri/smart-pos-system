@@ -143,6 +143,12 @@ first time, but `platform_store_detail()` and `complete_password_change()` were 
 `anon` through the default PUBLIC grant. `tests/platform-admin.test.ts` calls every RPC as `anon`
 and asserts `permission denied`; add any new function to that list.
 
+**The breakdown must never include cost or margin.** `platform_store_detail()` reports takings,
+payment mix, best sellers by *revenue*, staff activity and low stock - enough to judge whether a
+shop is healthy. It must not join `public.product_costs`, which is owner-only so cashiers cannot see
+it. A compromised admin account that could read shop costs would leak every tenant's margins. The
+test seeds a cost row and asserts neither the value nor a `cost_cents`/`margin` key appears.
+
 **Suspension is a filter in `app_store_id()`, not a check in each policy.** Because every policy
 resolves the store through that function, `where st.is_active` in its `allowed` CTE closes the shop to
 its own staff in one place. It also means a suspended shop must stay *visible* to the platform

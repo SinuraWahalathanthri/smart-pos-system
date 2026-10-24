@@ -148,11 +148,27 @@ end $$;
 revoke all on function public.platform_stores() from public, anon;
 grant execute on function public.platform_stores() to authenticated;
 
-/** One shop's story: staff, recent sales, and every platform action ever taken on it. */
+/**
+ * One shop's story: who works there, what it has sold, and every platform action taken on it.
+ *
+ * This is the operator's whole view of a shop, so it carries the shapes that actually answer
+ * "is this shop healthy?" - takings, average basket, payment mix, best sellers, per-staff activity,
+ * low stock and refunds - rather than a bare list of rows.
+ *
+ * Deliberately absent: cost and margin. `public.product_costs` is owner-only for a reason, and an
+ * administrator deciding whether to suspend an account does not need to know what a shop pays for
+ * its stock. Do not add a join to product_costs here.
+ *
+ * `refunds` arrives in 0005, so it is queried dynamically: this migration must still install on a
+ * project that stopped at 0004, and the count then reports zero instead of failing the call.
+ */
 create or replace function public.platform_store_detail(p_store uuid)
 returns jsonb
 language plpgsql stable security definer set search_path = public as $$
-declare v_out jsonb;
+declare
+  v_out jsonb;
+  v_refund_count bigint := 0;
+  v_refund_cents bigint := 0;
 begin
   if not public.is_platform_admin() then
     raise exception 'platform admins only' using errcode = '42501';
@@ -161,27 +177,78 @@ begin
     raise exception 'store not found';
   end if;
 
+  if to_regclass('public.refunds') is not null then
+    execute 'select count(*), coalesce(sum(amount_cents), 0)::bigint
+               from public.refunds where store_id = $1'
+      into v_refund_count, v_refund_cents using p_store;
+  end if;
+
   select jsonb_build_object(
     'store', (select to_jsonb(st) from public.stores st where st.id = p_store),
+    'totals', jsonb_build_object(
+      'sale_count', (select count(*) from public.sales s where s.store_id = p_store),
+      'sales_cents', (select coalesce(sum(s.total_cents), 0)::bigint
+                        from public.sales s where s.store_id = p_store),
+      'avg_sale_cents', (select coalesce(round(avg(s.total_cents)), 0)::bigint
+                           from public.sales s where s.store_id = p_store),
+      'last_sale_at', (select max(s.created_at) from public.sales s where s.store_id = p_store),
+      'product_count', (select count(*) from public.products pr
+                         where pr.store_id = p_store and pr.is_active and pr.archived_at is null),
+      -- A reorder_level of 0 means "not tracked", which is not the same as "out of stock".
+      'low_stock_count', (select count(*) from public.products pr
+                           where pr.store_id = p_store and pr.is_active and pr.archived_at is null
+                             and pr.reorder_level > 0 and pr.stock_on_hand <= pr.reorder_level),
+      'staff_count', (select count(*) from public.profiles p where p.store_id = p_store),
+      'active_staff_count', (select count(*) from public.profiles p
+                              where p.store_id = p_store and p.is_active),
+      'refund_count', v_refund_count,
+      'refund_cents', v_refund_cents
+    ),
     'staff', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', p.id, 'full_name', p.full_name, 'role', p.role,
-        'staff_code', p.staff_code, 'is_active', p.is_active, 'created_at', p.created_at
+        'staff_code', p.staff_code, 'is_active', p.is_active, 'created_at', p.created_at,
+        'sales_count', (select count(*) from public.sales s where s.cashier_id = p.id)
       ) order by p.created_at)
         from public.profiles p where p.store_id = p_store), '[]'::jsonb),
     'recent_sales', coalesce((
       select jsonb_agg(x order by x.created_at desc)
-        from (select s.id, s.receipt_no, s.total_cents, s.status, s.created_at
-                from public.sales s where s.store_id = p_store
-               order by s.created_at desc limit 50) x), '[]'::jsonb),
+        from (select s.id, s.receipt_no, s.total_cents, s.status, s.created_at,
+                     p.full_name as cashier
+                from public.sales s
+                left join public.profiles p on p.id = s.cashier_id
+               where s.store_id = p_store
+               order by s.created_at desc limit 25) x), '[]'::jsonb),
     'monthly_sales', coalesce((
       select jsonb_agg(jsonb_build_object('month', m.month, 'sales', m.sales, 'total_cents', m.total_cents)
                        order by m.month)
         from (select to_char(date_trunc('month', s.created_at), 'YYYY-MM') as month,
                      count(*) as sales,
-                     coalesce(sum(s.total_cents), 0) as total_cents
+                     coalesce(sum(s.total_cents), 0)::bigint as total_cents
                 from public.sales s where s.store_id = p_store
                group by 1 order by 1 desc limit 12) m), '[]'::jsonb),
+    'payment_mix', coalesce((
+      select jsonb_agg(jsonb_build_object('method', m.method, 'count', m.n, 'total_cents', m.total_cents)
+                       order by m.total_cents desc)
+        from (select pay.method, count(*) as n,
+                     coalesce(sum(pay.amount_cents), 0)::bigint as total_cents
+                from public.payments pay
+                join public.sales s on s.id = pay.sale_id
+               where s.store_id = p_store
+               group by 1) m), '[]'::jsonb),
+    -- Best sellers by revenue, not by cost: this is a demand signal, not a margin report.
+    'top_products', coalesce((
+      select jsonb_agg(jsonb_build_object('name', t.name, 'qty', t.qty, 'revenue_cents', t.revenue_cents)
+                       order by t.revenue_cents desc)
+        from (select si.name_snapshot as name,
+                     sum(si.qty) as qty,
+                     coalesce(sum(si.line_total_cents), 0)::bigint as revenue_cents
+                from public.sale_items si
+                join public.sales s on s.id = si.sale_id
+               where s.store_id = p_store and si.status = 'active'
+               group by 1
+               order by 3 desc
+               limit 8) t), '[]'::jsonb),
     'platform_actions', coalesce((
       select jsonb_agg(jsonb_build_object(
         'action', a.action, 'detail', a.detail, 'created_at', a.created_at

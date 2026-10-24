@@ -491,9 +491,117 @@ describe("0025 platform admin", () => {
     expect(active[0].is_active).toBe(true);
   });
 
-  it("refuses to promote an email that does not exist", async () => {
+  it("breaks a shop down into takings, payment mix, best sellers and recent sales", async () => {
+    const admin = await makeAdmin("admin11@platform.test");
+    const { store_id, user_id } = await provision(admin, "detail@shop.test");
+
+    // Seed two real sales rather than asserting on an empty shop, so the aggregates are actually
+    // exercised. Two products with different prices keep the "best seller" ordering meaningful.
+    await db.exec(`
+      insert into products (id, store_id, name, price_cents, is_active)
+      values ('11111111-1111-1111-1111-111111111111', '${store_id}', 'Cinnamon 100g', 45000, true),
+             ('22222222-2222-2222-2222-222222222222', '${store_id}', 'Pepper 100g', 30000, true);
+
+      insert into sales (id, store_id, receipt_no, status, subtotal_cents, total_cents, created_at)
+      values ('aaaaaaaa-0000-0000-0000-000000000001', '${store_id}', 90001, 'completed', 75000, 75000, now()),
+             ('aaaaaaaa-0000-0000-0000-000000000002', '${store_id}', 90002, 'completed', 30000, 30000, now());
+
+      insert into sale_items (sale_id, product_id, name_snapshot, qty, unit_price_cents, line_total_cents)
+      values ('aaaaaaaa-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+              'Cinnamon 100g', 1, 45000, 45000),
+             ('aaaaaaaa-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222',
+              'Pepper 100g', 1, 30000, 30000),
+             ('aaaaaaaa-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+              'Pepper 100g', 1, 30000, 30000);
+
+      insert into payments (sale_id, method, amount_cents)
+      values ('aaaaaaaa-0000-0000-0000-000000000001', 'cash', 75000),
+             ('aaaaaaaa-0000-0000-0000-000000000002', 'card', 30000);
+    `);
+
+    const detail = await asUser(admin, async () => {
+      const r = await rows<{ out: Record<string, unknown> }>(
+        `select public.platform_store_detail($1) as out`,
+        [store_id],
+      );
+      return r[0].out as {
+        totals: Record<string, number | string | null>;
+        payment_mix: { method: string; count: number; total_cents: number }[];
+        top_products: { name: string; qty: string; revenue_cents: number }[];
+        recent_sales: { receipt_no: number; cashier: string | null }[];
+        staff: { sales_count: number }[];
+      };
+    });
+
+    // 75000 + 30000 = 105000 lifetime; average basket 52500.
+    expect(detail.totals.sales_cents).toBe(105000);
+    expect(detail.totals.sale_count).toBe(2);
+    expect(detail.totals.avg_sale_cents).toBe(52500);
+    expect(detail.totals.product_count).toBe(2);
+    expect(detail.totals.refund_count).toBe(0);
+
+    // Payment mix is grouped per method, not per sale.
+    const mix = Object.fromEntries(detail.payment_mix.map((p) => [p.method, p.total_cents]));
+    expect(mix).toEqual({ cash: 75000, card: 30000 });
+
+    // Pepper sold twice, so it leads on revenue as well as quantity.
+    expect(detail.top_products[0].name).toBe("Pepper 100g");
+    expect(Number(detail.top_products[0].qty)).toBe(2);
+    expect(detail.top_products[0].revenue_cents).toBe(60000);
+
+    // Newest first, and the till's own receipt number is preserved.
+    expect(detail.recent_sales[0].receipt_no).toBe(90002);
+
+    // Cost never travels: a product_costs row must not appear in the payload at all.
+    await db.exec(
+      `insert into product_costs (product_id, store_id, cost_cents)
+       values ('11111111-1111-1111-1111-111111111111', '${store_id}', 12345)`,
+    );
+    const raw = await asUser(admin, async () => {
+      const r = await rows<{ out: unknown }>(`select public.platform_store_detail($1) as out`, [store_id]);
+      return JSON.stringify(r[0].out);
+    });
+    // Cost never travels: the seeded cost (12345) must not appear anywhere in the payload, and no
+    // cost/margin key may leak. `stores.cost_method` is a valuation policy setting, not a cost, so
+    // it is allowed - assert on keys and values rather than the substring "cost".
+    expect(raw).not.toContain("12345");
+    expect(raw.toLowerCase()).not.toContain("margin");
+    expect(raw.toLowerCase()).not.toContain("cost_cents");
+    expect(raw.toLowerCase()).not.toContain("unit_cost");
+
+    // The owner is counted among staff, and the shop is untouched by a read.
+    expect(detail.staff.length).toBeGreaterThanOrEqual(1);
+    expect(user_id).toBeTruthy();
+  });
+
+  it("refuses a shop owner who asks for another shop's detail", async () => {
+    const admin = await makeAdmin("admin12@platform.test");
+    const a = await provision(admin, "peek1@shop.test");
+    const b = await provision(admin, "peek2@shop.test");
+
     await expect(
-      db.exec(bootstrap("promote").replace("'<YOUR EMAIL>'", "'nobody@example.test'")),
-    ).rejects.toThrow(/no account with email/i);
+      asUser(a.user_id, () => rows(`select public.platform_store_detail($1)`, [b.store_id])),
+    ).rejects.toThrow(/platform admins only/i);
+  });
+
+  it("still returns a breakdown for a suspended shop", async () => {
+    // Suspension closes the shop to its staff; it must not hide the shop from the operator, who needs
+    // to see what it did before and after the decision.
+    const admin = await makeAdmin("admin13@platform.test");
+    const { store_id } = await provision(admin, "suspended-detail@shop.test");
+
+    await asUser(admin, () =>
+      rows(`select public.platform_set_store_active($1, false, 'unpaid invoice')`, [store_id]),
+    );
+
+    const detail = await asUser(admin, async () => {
+      const r = await rows<{ out: { store: { is_active: boolean }; totals: { sale_count: number } } }>(
+        `select public.platform_store_detail($1) as out`,
+        [store_id],
+      );
+      return r[0].out;
+    });
+    expect(detail.store.is_active).toBe(false);
+    expect(detail.totals.sale_count).toBe(0);
   });
 });

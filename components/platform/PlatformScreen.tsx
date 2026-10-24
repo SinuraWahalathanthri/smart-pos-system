@@ -169,7 +169,11 @@ export function PlatformScreen() {
               </thead>
               <tbody>
                 {shown.map((s) => (
-                  <tr key={s.id} className="border-t border-border align-middle">
+                  <tr
+                    key={s.id}
+                    onClick={() => setOpenStore(s.id)}
+                    className="cursor-pointer border-t border-border align-middle hover:bg-surface-2"
+                  >
                     <td className="px-3 py-2">
                       <p className="font-medium">{s.name}</p>
                       <p className="text-xs text-muted">
@@ -220,11 +224,22 @@ export function PlatformScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  hint,
+  warn,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  warn?: boolean;
+}) {
   return (
     <div className="rounded-xl border border-border bg-surface px-4 py-3">
       <p className="text-xs uppercase text-muted">{label}</p>
       <p className="num text-2xl font-semibold">{value}</p>
+      {hint && <p className={`text-xs ${warn ? "text-danger" : "text-muted"}`}>{hint}</p>}
     </div>
   );
 }
@@ -457,8 +472,8 @@ function StoreDetailDialog({
             <Info label="VAT no" value={store?.vat_no ?? "-"} />
             <Info label="Created" value={store ? new Date(store.created_at).toLocaleString() : "-"} />
             <Info
-              label="Lifetime sales"
-              value={`${store?.sale_count ?? 0} · ${formatMoney(store?.sales_cents ?? 0)}`}
+              label="Last sale"
+              value={detail.totals.last_sale_at ? new Date(detail.totals.last_sale_at).toLocaleString() : "never"}
             />
           </div>
 
@@ -469,6 +484,30 @@ function StoreDetailDialog({
               {store?.suspended_reason ?? "no reason recorded"}
             </p>
           )}
+
+          {/* Headline numbers. "Lifetime" covers every uploaded sale; the monthly table below shows the
+              recent shape, so the two are not required to agree. */}
+          <section className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="Lifetime takings" value={formatMoney(detail.totals.sales_cents)} />
+            <Stat label="Sales" value={String(detail.totals.sale_count)} />
+            <Stat label="Average basket" value={formatMoney(detail.totals.avg_sale_cents)} />
+            <Stat
+              label="Active products"
+              value={String(detail.totals.product_count)}
+              hint={detail.totals.low_stock_count > 0 ? `${detail.totals.low_stock_count} low stock` : undefined}
+              warn={detail.totals.low_stock_count > 0}
+            />
+            <Stat
+              label="Staff"
+              value={`${detail.totals.active_staff_count}/${detail.totals.staff_count}`}
+              hint="active / total"
+            />
+            <Stat
+              label="Refunds"
+              value={formatMoney(detail.totals.refund_cents)}
+              hint={`${detail.totals.refund_count} refunded`}
+            />
+          </section>
 
           <section>
             <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
@@ -483,6 +522,7 @@ function StoreDetailDialog({
                   <span className="text-xs text-muted">
                     {p.role}
                     {!p.is_active && " · inactive"}
+                    {p.sales_count > 0 && <span className="num"> · {p.sales_count} sales</span>}
                   </span>
                 </li>
               ))}
@@ -506,6 +546,80 @@ function StoreDetailDialog({
                   </li>
                 ))}
               </ul>
+            )}
+          </section>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <section>
+              <h3 className="mb-1 text-sm font-semibold">Payment mix</h3>
+              {detail.payment_mix.length === 0 ? (
+                <Empty text="No payments recorded." />
+              ) : (
+                <ul className="divide-y divide-border rounded-xl border border-border">
+                  {detail.payment_mix.map((p) => (
+                    <li key={p.method} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                      <span className="capitalize">{p.method}</span>
+                      <span className="text-xs text-muted">
+                        {p.count} · <span className="num">{formatMoney(p.total_cents)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section>
+              <h3 className="mb-1 text-sm font-semibold">Best sellers</h3>
+              {detail.top_products.length === 0 ? (
+                <Empty text="Nothing sold yet." />
+              ) : (
+                <ul className="divide-y divide-border rounded-xl border border-border">
+                  {detail.top_products.map((p, i) => (
+                    <li key={`${p.name}-${i}`} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                      <span className="truncate pr-2">{p.name}</span>
+                      <span className="shrink-0 text-xs text-muted">
+                        {Number(p.qty)} · <span className="num">{formatMoney(p.revenue_cents)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+
+          <section>
+            <h3 className="mb-1 text-sm font-semibold">Recent sales</h3>
+            {detail.recent_sales.length === 0 ? (
+              <Empty text="No sales recorded." />
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-2 text-left text-xs uppercase text-muted">
+                    <tr>
+                      <th className="px-3 py-1.5 font-medium">Receipt</th>
+                      <th className="px-3 py-1.5 font-medium">When</th>
+                      <th className="px-3 py-1.5 font-medium">Cashier</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Total</th>
+                      <th className="px-3 py-1.5 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.recent_sales.map((s) => (
+                      <tr key={s.id} className="border-t border-border">
+                        <td className="num px-3 py-1.5">#{s.receipt_no}</td>
+                        <td className="px-3 py-1.5 text-xs text-muted">
+                          {new Date(s.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-1.5 text-xs">{s.cashier ?? "—"}</td>
+                        <td className="num px-3 py-1.5 text-right">{formatMoney(s.total_cents)}</td>
+                        <td className="px-3 py-1.5 text-xs">
+                          <span className={s.status === "completed" ? "text-muted" : "text-danger"}>{s.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 
@@ -746,6 +860,13 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-xs uppercase text-muted">{label}</p>
       <p className="break-words text-sm">{value}</p>
     </div>
+  );
+}
+
+/** Muted placeholder for a table that has nothing in it yet. */
+function Empty({ text }: { text: string }) {
+  return (
+    <p className="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted">{text}</p>
   );
 }
 

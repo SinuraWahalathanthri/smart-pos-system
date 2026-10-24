@@ -37,6 +37,7 @@ export type PlatformStaff = {
   staff_code: string;
   is_active: boolean;
   created_at: string;
+  sales_count: number;
 };
 
 export type PlatformSale = {
@@ -45,6 +46,7 @@ export type PlatformSale = {
   total_cents: number;
   status: string;
   created_at: string;
+  cashier: string | null;
 };
 
 export type PlatformAction = {
@@ -53,11 +55,27 @@ export type PlatformAction = {
   created_at: string;
 };
 
+export type PlatformTotals = {
+  sale_count: number;
+  sales_cents: number;
+  avg_sale_cents: number;
+  last_sale_at: string | null;
+  product_count: number;
+  low_stock_count: number;
+  staff_count: number;
+  active_staff_count: number;
+  refund_count: number;
+  refund_cents: number;
+};
+
 export type PlatformStoreDetail = {
   store: PlatformStore & { owner_id: string | null };
+  totals: PlatformTotals;
   staff: PlatformStaff[];
   recent_sales: PlatformSale[];
   monthly_sales: { month: string; sales: number; total_cents: number }[];
+  payment_mix: { method: string; count: number; total_cents: number }[];
+  top_products: { name: string; qty: number; revenue_cents: number }[];
   platform_actions: PlatformAction[];
 };
 
