@@ -125,3 +125,45 @@ exported as a decimal string by `centsToDecimal`. CSV cells are prefixed with `'
 with `= + - @` (spreadsheet injection).
 
 Scratch-file discipline: put temporary scripts outside the repo, or delete them in the same command.
+
+## Platform administration (0025, `lib/platform.ts`, `components/platform/`)
+
+**The admin panel is read-only over trading data, by construction.** `platform_stores()` and
+`platform_store_detail()` are the only reads, and no RPC exists that edits a sale, product or stock
+level. Do not add "helpful" admin write paths: the value of this role is that a compromised admin
+account cannot falsify a shop's books.
+
+**`platform_admins` is a principal, not a role.** It is a separate table keyed by `auth_user_id`, and
+an admin belongs to no store. `is_platform_admin()` is security definer because clients cannot read
+the table. Never add a self-service "become admin" path - the bootstrap script
+(`supabase/setup-platform-admin.sql`) is deliberately the only way to make the first one.
+
+**Every new function needs BOTH a guard and a `revoke ... from public, anon`.** The guards were right
+first time, but `platform_store_detail()` and `complete_password_change()` were still executable by
+`anon` through the default PUBLIC grant. `tests/platform-admin.test.ts` calls every RPC as `anon`
+and asserts `permission denied`; add any new function to that list.
+
+**Suspension is a filter in `app_store_id()`, not a check in each policy.** Because every policy
+resolves the store through that function, `where st.is_active` in its `allowed` CTE closes the shop to
+its own staff in one place. It also means a suspended shop must stay *visible* to the platform
+functions (they query `stores` directly, not through the helper) - so "suspended" is never "deleted".
+`my_shop()` returns `onboarded: true, suspended: true` so the app shows "closed" rather than offering
+the onboarding flow, which would silently create a second shop.
+
+**A generated password is shown once and then unrecoverable.** Password hashing uses
+`extensions.crypt()`, which lives in the `extensions` schema, so every security-definer function that
+touches it needs `search_path = public, extensions`.
+`platform_create_owner()` writes the auth user, the `auth.identities` row (without it email sign-in
+fails even though the user exists), the store and the owner profile in ONE transaction. The account is
+flagged `must_change_password`, and `/account?first=1` blocks the app until it is replaced - otherwise
+whoever wrote the password down still has access. Clear the flag only after `auth.updateUser()`
+succeeds, never before.
+
+**The admin screen is outside `DashboardShell` on purpose.** An administrator holds no shop, so
+`useShop` (which redirects when there is no store) would bounce them forever. `app/page.tsx` is the
+single place that decides the landing route; keep the three cases (admin / must-change-password /
+new owner) in order there.
+
+PowerShell note: the shell is a persistent session, and an unterminated heredoc hangs it with no
+recovery except a reset. Write files with the editor tool rather than `node -e "..."`.
+
