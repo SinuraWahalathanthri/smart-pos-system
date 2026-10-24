@@ -1,6 +1,6 @@
 {
   "name": "pos-system",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -29,7 +29,7 @@
     "dexie": "^4.4.6",
     "dexie-react-hooks": "^4.4.0",
     "lucide-react": "^1.57.0",
-    "next": "16.4.0",
+    "next": "16.4.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "^4.6.7",
@@ -45,7 +45,7 @@
     "electron": "^44.9.0",
     "electron-builder": "^26.15.3",
     "eslint": "^9",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.1",
     "fake-indexeddb": "^6.2.5",
     "png-to-ico": "^3.0.2",
     "tailwindcss": "^4",

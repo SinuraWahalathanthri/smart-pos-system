@@ -1,0 +1,115 @@
+name: Desktop installers
+
+# Builds the downloadable apps. Vercel deploys the website on push; this only runs for desktop
+# releases, so the two targets never interfere.
+#
+# To publish a release:
+#   1. bump the version in package.json
+#   2. git tag v0.1.1 && git push origin v0.1.1
+# The installers are then attached to the GitHub Release for that tag.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create the release as a draft"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # A failing macOS build should not hide a good Windows installer.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: macos-latest
+            target: mac
+          - os: ubuntu-latest
+            target: linux
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Optional: makes the released installers arrive already connected. Set the repository
+      # secrets POS_SUPABASE_URL / POS_SUPABASE_ANON_KEY, or leave them unset for a generic build
+      # whose user pastes the project into Connect your database on first launch.
+      - name: Write desktop database config
+        run: npm run desktop:config
+        env:
+          POS_SUPABASE_URL: ${{ secrets.POS_SUPABASE_URL }}
+          POS_SUPABASE_ANON_KEY: ${{ secrets.POS_SUPABASE_ANON_KEY }}
+
+      # The static export is what ships inside the app. A broken build fails here rather than
+      # producing an installer that opens to a blank window.
+      - name: Build static export
+        run: npm run build:desktop
+
+      # The packaged app must prove it boots, not merely compile. macOS runners cannot open a
+      # window without a signed helper, so the check runs where a headless display exists.
+      - name: Verify the build boots (Linux)
+        if: matrix.target == 'linux'
+        run: xvfb-run --auto-servernum npm run smoke:desktop
+        env:
+          ELECTRON_DISABLE_SECURITY_WARNINGS: "1"
+      - name: Verify the build boots (Windows)
+        if: matrix.target == 'win'
+        run: npm run smoke:desktop
+        env:
+          ELECTRON_DISABLE_SECURITY_WARNINGS: "1"
+
+      - name: Package installer
+        run: npx electron-builder --config electron-builder.config.js --${{ matrix.target }} --publish never
+        env:
+          # Unsigned by default. Set CSC_LINK / CSC_KEY_PASSWORD as repo secrets to sign.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.target }}
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          files: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+          body: |
+            ## Spice Shop POS — desktop
+
+            Download the installer for your computer:
+
+            | Platform | File |
+            | --- | --- |
+            | Windows | `Spice-Shop-POS-Setup-*.exe` |
+            | macOS | `Spice-Shop-POS-*-*.dmg` |
+            | Linux | `Spice-Shop-POS-*.AppImage` |
+
+            The desktop app and the website share the same database and the same login. A till can be
+            set up either way, and it keeps selling offline.
+
+            These builds are not code-signed, so Windows SmartScreen ("More info" → "Run anyway") and
+            macOS Gatekeeper (right-click the app → Open) will ask for confirmation the first time.
