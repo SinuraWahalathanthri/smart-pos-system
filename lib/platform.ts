@@ -61,9 +61,32 @@ export type PlatformStoreDetail = {
   platform_actions: PlatformAction[];
 };
 
+/**
+ * Turn the two setup failures an operator actually hits into instructions.
+ *
+ * Raw PostgREST text is useless here: "PGRST202 ... schema cache" and "platform admins only" both
+ * look like a broken app, when in fact one means "apply the migration" and the other means "insert
+ * yourself into platform_admins". Both are one-off setup steps performed in the SQL editor.
+ */
+function setupHint(message: string, code?: string): Error {
+  if (code === "PGRST202" || /schema cache/i.test(message)) {
+    return new Error(
+      "Migration 0025 has not been applied to this project. Run supabase/migrations/0025_platform_admin.sql " +
+        "in the Supabase SQL editor, then reload.",
+    );
+  }
+  if (/platform admins only/i.test(message)) {
+    return new Error(
+      "Signed in, but this account is not a platform administrator. Run supabase/setup-platform-admin.sql " +
+        "once to add it, then sign out and in again.",
+    );
+  }
+  return new Error(message);
+}
+
 async function rpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
   const { data, error } = await getSupabase().rpc(fn, args);
-  if (error) throw new Error(error.message);
+  if (error) throw setupHint(error.message, error.code);
   return data as T;
 }
 

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Boxes,
+  Building2,
   ClipboardCheck,
   Factory,
   LayoutDashboard,
@@ -75,6 +76,12 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: "/staff", label: "Staff", icon: Users, needs: "manageStaff" },
       { href: "/audit", label: "Audit", icon: ShieldCheck, needs: "viewAudit" },
     ],
+  },
+  // Only drawn for a platform administrator. Kept last and deliberately un-primary: it is about the
+  // installation, not about running this shop's day.
+  {
+    group: "Platform",
+    items: [{ href: "/platform", label: "All shops", icon: Building2, needs: "managePlatform" }],
   },
 ];
 
@@ -166,7 +173,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { ctx, loading, error, signOut, switchStore, reload } = useShop();
   const [editingShop, setEditingShop] = useState(false);
   const role = ctx?.role;
-  const can = permissions(role);
+  const can = permissions(role, ctx?.is_platform_admin);
   const groups = useVisibleNav(can);
 
   if (loading) {

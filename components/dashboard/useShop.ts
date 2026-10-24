@@ -116,7 +116,7 @@ export function useShop() {
 }
 
 /** What each role may do in the dashboard. The server enforces the same thing. */
-export function permissions(role: Role | undefined) {
+export function permissions(role: Role | undefined, isPlatformAdmin = false) {
   return {
     manageStaff: role === "owner",
     manageProducts: role === "owner" || role === "supervisor",
@@ -131,5 +131,10 @@ export function permissions(role: Role | undefined) {
     // refuse a supervisor regardless of what this returns.
     manageFinanceSettings: role === "owner",
     useTill: true,
+    // The platform panel belongs to the person running the whole installation, not to any shop. It is
+    // separate from `role` on purpose: an operator may also own a shop, and the two must not be
+    // confused. The platform_* RPCs check is_platform_admin() server-side, so this only decides
+    // whether the doorway is drawn.
+    managePlatform: isPlatformAdmin,
   };
 }

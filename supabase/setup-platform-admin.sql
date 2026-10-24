@@ -53,3 +53,34 @@ begin
 
   raise notice 'platform admin created for %', v_email;
 end $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────────────────────────
+-- ALTERNATIVE: you already have an account and want to make IT the administrator.
+--
+-- The block above only creates a new user, and deliberately refuses when the email already exists.
+-- If you already sign in as a shop owner on this project, use this block instead - it promotes the
+-- existing account, keeping its password. (An account can be both an operator and a shop owner; the
+-- two roles are separate tables and this does not disturb the shop.)
+--
+-- Replace <YOUR EMAIL> only. Then sign out and back in so the app re-reads my_shop().
+-- ─────────────────────────────────────────────────────────────────────────────────────────────────
+do $$
+declare
+  v_email text := '<YOUR EMAIL>';
+  v_user  uuid;
+begin
+  select id into v_user from auth.users where lower(email) = lower(trim(v_email));
+  if v_user is null then
+    raise exception 'no account with email % - use the CREATE block above instead', v_email;
+  end if;
+
+  insert into public.platform_admins (auth_user_id, full_name, note)
+  values (
+    v_user,
+    coalesce((select raw_user_meta_data->>'full_name' from auth.users where id = v_user), 'Administrator'),
+    'promoted existing account'
+  )
+  on conflict (auth_user_id) do update set is_active = true;
+
+  raise notice 'existing account % is now a platform admin', v_email;
+end $$;

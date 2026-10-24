@@ -20,6 +20,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const ROOT = join(__dirname, "..", "supabase");
 
+/**
+ * The bootstrap file holds two alternative DO blocks (create a new admin, or promote an existing
+ * account). A human runs exactly one of them, so the test must too - running the whole file would
+ * execute both and the promote block would then find the account created by the first.
+ */
+function bootstrap(which: "create" | "promote"): string {
+  const file = readFileSync(join(ROOT, "setup-platform-admin.sql"), "utf8");
+  const blocks = file.split(/\n\s*do \$\$/gi);
+  return `do $$ ${which === "create" ? blocks[1] : blocks[2]}`;
+}
+
 const SUPABASE_STUBS = `
   create schema if not exists extensions;
   create role anon nologin;
@@ -401,7 +412,7 @@ describe("0025 platform admin", () => {
     // The bootstrap is a manual script whose only execution is a human pasting it into the SQL editor,
     // so a typo is not caught by any other test. Substitute the placeholders the way a person would
     // and run the file itself.
-    const sql = readFileSync(join(ROOT, "setup-platform-admin.sql"), "utf8")
+    const sql = bootstrap("create")
       .replace("'<ADMIN EMAIL>'", "'bootstrap@platform.test'")
       .replace("'<A LONG RANDOM PASSWORD>'", "'a-long-enough-password'")
       .replace("'<YOUR NAME>'", "'Bootstrap Admin'");
@@ -434,5 +445,55 @@ describe("0025 platform admin", () => {
 
     // Running it twice must stop with a clear message rather than half-creating a second admin.
     await expect(db.exec(sql)).rejects.toThrow(/already exists/i);
+  });
+
+  it("promotes an existing shop owner instead of creating a second account", async () => {
+    // The realistic situation: the operator has been testing as a shop owner and wants that same
+    // login to run the platform. The promote block must add the admin row without touching the shop,
+    // and my_shop() must then report both roles at once.
+    const first = await makeAdmin("operator@platform.test");
+    const { user_id, store_id } = await provision(first, "operator@shop.test");
+
+    const sql = bootstrap("promote").replace("'<YOUR EMAIL>'", "'operator@shop.test'");
+    await db.exec(sql);
+
+    const isAdmin = await asUser(user_id, async () => {
+      const r = await rows<{ is_platform_admin: boolean }>(`select public.is_platform_admin()`);
+      return r[0].is_platform_admin;
+    });
+    expect(isAdmin).toBe(true);
+
+    // The shop is untouched: still owned, still onboarded, still open. `store.id` is nested, so
+    // checking it proves the promotion did not re-create or re-point the shop.
+    const shop = await asUser(user_id, async () => {
+      const r = await rows<{ my_shop: Record<string, unknown> }>(`select public.my_shop() as my_shop`);
+      return r[0].my_shop;
+    });
+    expect(shop).toMatchObject({
+      onboarded: true,
+      is_platform_admin: true,
+      suspended: false,
+      store: { id: store_id },
+    });
+
+    // Promoted, not duplicated.
+    const admins = await rows(`select 1 from platform_admins where auth_user_id = $1`, [user_id]);
+    expect(admins).toHaveLength(1);
+
+    // Idempotent: running it again reactivates rather than failing, so a mistaken
+    // "is_active = false" is fixable without deleting anything.
+    await db.exec(`update platform_admins set is_active = false where auth_user_id = '${user_id}'`);
+    await db.exec(sql);
+    const active = await rows<{ is_active: boolean }>(
+      `select is_active from platform_admins where auth_user_id = $1`,
+      [user_id],
+    );
+    expect(active[0].is_active).toBe(true);
+  });
+
+  it("refuses to promote an email that does not exist", async () => {
+    await expect(
+      db.exec(bootstrap("promote").replace("'<YOUR EMAIL>'", "'nobody@example.test'")),
+    ).rejects.toThrow(/no account with email/i);
   });
 });
