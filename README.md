@@ -7,6 +7,20 @@ offline selling, and a Supabase backend.
 - **[PLAN.md](PLAN.md)** — what the system does and the build phases
 - **[DESIGN.md](DESIGN.md)** — look, layout and interaction rules
 - **[OPERATIONS.md](OPERATIONS.md)** — the manual for shop staff: shifts, emergencies, month-end
+- **[LICENSE](LICENSE)** — AGPL-3.0-or-later: free to use and modify, modifications shared back
+
+## Licence
+
+Copyright (C) 2026 Sinura Wahalathanthri.
+
+This program is free software under the **GNU Affero General Public License v3.0 or later**
+(`AGPL-3.0-or-later`). You may run it, study it, modify it and redistribute it, provided modified
+versions stay under the same licence. Because a POS is used over a network, the AGPL's §13 applies:
+if you run a modified version as a hosted service, you must offer users of that service the
+corresponding source.
+
+Shops running the released installers or the hosted app, and staff working in them, are unaffected —
+the licence governs distribution of the software, not its use.
 
 ## Run it
 

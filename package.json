@@ -1,6 +1,7 @@
 {
   "name": "pos-system",
   "version": "2.0.0",
+  "license": "AGPL-3.0-or-later",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -55,5 +56,5 @@
   },
   "main": "desktop/main.js",
   "description": "Barcode-driven point of sale for the shop: checkout, stock, purchasing and analytics.",
-  "author": "Java Institute for Advanced Technology"
+  "author": "Sinura Wahalathanthri"
 }
