@@ -14,6 +14,7 @@ export type Shop = {
   bottle_fee_cents: number;
   max_cashier_discount_pct: number;
   prices_include_tax: boolean;
+  is_active?: boolean;
 };
 
 export type Role = "owner" | "supervisor" | "cashier";
@@ -23,6 +24,13 @@ export type ShopContext = {
   store?: Shop;
   role?: Role;
   stores?: { id: string; name: string; role: Role }[];
+  /** A platform administrator: belongs to no shop, and lands on /platform. */
+  is_platform_admin?: boolean;
+  /** The shop is shut by a platform administrator. Kept distinct from "not set up yet". */
+  suspended?: boolean;
+  suspended_reason?: string | null;
+  /** The current password was generated for them and must be replaced. */
+  must_change_password?: boolean;
 };
 
 /**
@@ -59,8 +67,15 @@ export function useShop() {
       }
 
       const parsed = shop as ShopContext;
+      // Order matters. A handed-over password is replaced before anything else, because until it is,
+      // whoever wrote the password down can sign in as this owner. An administrator is then sent to
+      // the platform screen: they hold no shop, so the shop dashboard would redirect forever.
+      if (parsed.onboarded && parsed.must_change_password) {
+        router.replace("/account?first=1");
+        return;
+      }
       if (!parsed.onboarded) {
-        router.replace("/onboarding");
+        router.replace(parsed.is_platform_admin ? "/platform" : "/onboarding");
         return;
       }
       setCtx({

@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Pencil,
   Receipt,
   ReceiptText,
   ShieldCheck,
@@ -24,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { useShop, permissions, type Role } from "./useShop";
+import { ShopDetailsDialog } from "./ShopDetailsDialog";
 
 type NavItem = {
   href: string;
@@ -161,7 +163,8 @@ function NavMenu({ groups }: { groups: ReturnType<typeof useVisibleNav> }) {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { ctx, loading, error, signOut, switchStore } = useShop();
+  const { ctx, loading, error, signOut, switchStore, reload } = useShop();
+  const [editingShop, setEditingShop] = useState(false);
   const role = ctx?.role;
   const can = permissions(role);
   const groups = useVisibleNav(can);
@@ -179,6 +182,26 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </Centered>
     );
   }
+  // Onboarded but shut by a platform administrator. This is not the same as "no shop yet": the data
+  // still exists, so it must not fall through to the onboarding flow and offer to create a new shop.
+  if (ctx?.suspended) {
+    return (
+      <Centered>
+        <div className="max-w-md text-center">
+          <ShieldCheck className="mx-auto mb-3 text-warning" size={28} />
+          <h2 className="font-semibold">This shop is closed</h2>
+          <p className="mt-1 text-sm text-muted">
+            {ctx.store?.name ?? "Your shop"} has been suspended
+            {ctx.suspended_reason ? `: ${ctx.suspended_reason}` : "."}
+          </p>
+          <p className="mt-3 text-sm text-muted">Contact your supplier to reopen it. Your data is safe.</p>
+          <button className="mt-4 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface-2" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        </div>
+      </Centered>
+    );
+  }
   if (!ctx?.store) return null;
 
   return (
@@ -193,6 +216,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <p className="font-semibold">{ctx.store.name}</p>
               <p className="text-xs capitalize text-muted">{role}</p>
             </div>
+            {role === "owner" && (
+              <button
+                onClick={() => setEditingShop(true)}
+                className="rounded-lg p-1.5 text-muted hover:bg-surface-2"
+                aria-label="Edit shop details"
+                title="Edit shop details"
+              >
+                <Pencil size={15} />
+              </button>
+            )}
           </div>
 
           {(ctx.stores?.length ?? 0) > 1 && (
@@ -238,6 +271,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <ShoppingCart size={16} />
             Open till
           </button>
+          <Link
+            href="/account"
+            className="rounded-lg p-2 text-muted hover:bg-surface-2"
+            aria-label="Your account"
+            title="Your account"
+          >
+            <UserRound size={18} />
+          </Link>
           <button
             onClick={() => void signOut()}
             className="rounded-lg p-2 text-muted hover:bg-surface-2"
@@ -249,6 +290,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+
+      {editingShop && ctx.store && (
+        <ShopDetailsDialog
+          shop={ctx.store}
+          onClose={() => setEditingShop(false)}
+          onSaved={() => {
+            setEditingShop(false);
+            void reload();
+          }}
+        />
+      )}
     </div>
   );
 }

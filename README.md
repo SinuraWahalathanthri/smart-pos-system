@@ -152,13 +152,31 @@ Data resets each run. It is a development tool, not a real server.
 2. `npm run dev`, then open `/setup` and paste the project URL and the **anon** key (never the service_role
    key - the form rejects it). Credentials are stored on the device, so pointing a till at a project needs
    no rebuild. `.env.example` is only for pre-configuring a fixed single-shop build.
-3. Create the owner's account in Authentication -> Users -> Add user, with auto-confirm on. This is the
-   person who will set the shop up.
-4. Open the app and sign in. First run goes to `/onboarding`: name the shop and it is created **empty**.
-   There is no sample catalogue, and `seed.sql` is never run on a live shop.
-5. The dashboard is where staff, products and analytics live. PINs are hashed server side and can only be
+3. Create the first **platform administrator** by running `supabase/setup-platform-admin.sql` in the SQL
+   editor with the placeholders filled in. Run it once, then discard the edited text: it holds a
+   plain-text password. After migration `0025` this is the only account that has to be made by hand, and
+   it exists because the admin panel itself provisions everyone else. Never add a self-service "become
+   admin" route - it would be a permanent privilege-escalation hole.
+4. Sign in as that administrator. You land on `/platform`, which lists every shop (read-only) and can
+   create an owner account with a generated password. Give the owner that email and password.
+5. The owner signs in and is sent to `/account?first=1` to replace the handed-over password, then to
+   `/onboarding` to name the shop. The shop is created **empty**: there is no sample catalogue, and
+   `seed.sql` is never run on a live shop.
+6. The dashboard is where staff, products and analytics live. PINs are hashed server side and can only be
    reset there, never read back. Supervisors add products but not staff; cashiers only use the till.
-6. To run a second till, add another user in Authentication and give them a staff row from the dashboard.
+   The owner can correct their own shop details (name, address, VAT number, bottle deposit, discount
+   cap, tax-inclusive pricing) from the pencil beside the shop name.
+7. To run a second till, add another user in Authentication and give them a staff row from the dashboard.
+
+#### What the platform administrator can and cannot do
+
+The screen at `/platform` is deliberately narrow. It can create an owner account and their empty shop,
+reset an owner's password (which forces a change on next sign-in), and suspend or restore a shop with a
+recorded reason. It **cannot** read or change sales, products, stock or staff beyond a read-only history
+per shop - no such RPC exists, and `platform_*` functions check `is_platform_admin()` on the server, so
+reaching the URL as a shop owner returns an error rather than data. Suspending closes the shop to its own
+staff (every policy resolves the store through `app_store_id()`, which returns null while suspended) but
+keeps it visible to the administrator, and deletes nothing.
 
 `supabase/setup-shop.example.sql` is no longer needed for a new shop (onboarding does the same work from
 the app). It stays as a reference for scripting a shop by hand.

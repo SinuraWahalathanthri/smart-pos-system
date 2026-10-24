@@ -7,11 +7,12 @@ import { getSupabase, isConnected } from "@/lib/supabase/client";
  *
  *   not configured   -> /setup        (paste the project URL and anon key)
  *   no session       -> /login
- *   no shop yet      -> /onboarding   (the owner names their shop)
+ *   password handed over but unchanged -> /account?first=1
+ *   no shop yet      -> /platform     (a platform administrator) or /onboarding (a new owner)
  *   a shop exists    -> /dashboard    (the till is one click away from there)
  *
- * The server answers "is there a shop?" through my_shop(), so this decides from the database rather
- * than from anything cached in the browser.
+ * The server answers these through my_shop(), so this decides from the database rather than from
+ * anything cached in the browser.
  */
 export default function Home() {
   const router = useRouter();
@@ -29,7 +30,18 @@ export default function Home() {
           return;
         }
         const { data: shop } = await sb.rpc("my_shop");
-        router.replace((shop as { onboarded?: boolean } | null)?.onboarded ? "/dashboard" : "/onboarding");
+        const ctx = shop as
+          | { onboarded?: boolean; is_platform_admin?: boolean; must_change_password?: boolean }
+          | null;
+        if (ctx?.onboarded && ctx.must_change_password) {
+          router.replace("/account?first=1");
+          return;
+        }
+        if (ctx?.onboarded) {
+          router.replace("/dashboard");
+          return;
+        }
+        router.replace(ctx?.is_platform_admin ? "/platform" : "/onboarding");
       } catch {
         router.replace("/setup");
       }
