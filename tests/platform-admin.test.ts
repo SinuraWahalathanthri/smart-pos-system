@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { normaliseDetail, type PlatformStoreDetail } from "../lib/platform";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
@@ -603,5 +604,57 @@ describe("0025 platform admin", () => {
     });
     expect(detail.store.is_active).toBe(false);
     expect(detail.totals.sale_count).toBe(0);
+  });
+});
+
+/**
+ * The UI reads `detail.totals.sale_count` and friends directly, so a payload missing those keys
+ * crashes the whole screen (this happened against a live project still running the earlier RPC).
+ * normaliseDetail is the single place that makes the shape total, so it is tested against the old
+ * payload shape directly rather than through a mocked Supabase client.
+ */
+describe("platform detail payload normalisation", () => {
+  const store = { id: "s1", name: "Shop" } as PlatformStoreDetail["store"];
+
+  it("fills in the sections an older RPC never sent, and flags them", () => {
+    const d = normaliseDetail({
+      store,
+      staff: [],
+      recent_sales: [],
+      monthly_sales: [],
+      platform_actions: [],
+    });
+
+    expect(d.breakdown_available).toBe(false);
+    expect(d.payment_mix).toEqual([]);
+    expect(d.top_products).toEqual([]);
+    // Zeroed, not undefined: rendering must not throw.
+    expect(d.totals.sale_count).toBe(0);
+    expect(d.totals.last_sale_at).toBeNull();
+    expect(d.totals.sales_cents).toBe(0);
+  });
+
+  it("keeps real totals and marks the breakdown as available", () => {
+    const d = normaliseDetail({
+      store,
+      totals: { ...normaliseDetail({}).totals, sale_count: 3, sales_cents: 4500, last_sale_at: "2026-01-01" },
+      staff: [],
+      recent_sales: [],
+      monthly_sales: [],
+      payment_mix: [],
+      top_products: [],
+      platform_actions: [],
+    });
+
+    expect(d.breakdown_available).toBe(true);
+    expect(d.totals.sale_count).toBe(3);
+    expect(d.totals.sales_cents).toBe(4500);
+  });
+
+  it("treats a null payload section as empty rather than crashing", () => {
+    const d = normaliseDetail({ store, totals: null as never, staff: null as never });
+
+    expect(d.staff).toEqual([]);
+    expect(d.breakdown_available).toBe(false);
   });
 });

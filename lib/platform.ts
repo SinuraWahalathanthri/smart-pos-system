@@ -77,6 +77,12 @@ export type PlatformStoreDetail = {
   payment_mix: { method: string; count: number; total_cents: number }[];
   top_products: { name: string; qty: number; revenue_cents: number }[];
   platform_actions: PlatformAction[];
+  /**
+   * False when the database still runs the pre-breakdown version of `platform_store_detail()`.
+   * The zeroed totals are then placeholders, not facts, and the UI must say so rather than display
+   * them as if the shop had never sold anything.
+   */
+  breakdown_available: boolean;
 };
 
 /**
@@ -113,10 +119,53 @@ export async function listStores(): Promise<PlatformStore[]> {
   return (await rpc<PlatformStore[] | null>("platform_stores")) ?? [];
 }
 
-/** One shop's staff, sales history and the platform actions taken on it. Read-only. */
+/**
+ * One shop's staff, sales history and the platform actions taken on it. Read-only.
+ *
+ * Normalised, not passed through: the database may still be running the earlier version of this
+ * function that predates the breakdown, in which case `totals`, `payment_mix` and `top_products` are
+ * simply absent. Reading `detail.totals.x` then throws inside render and takes the whole screen down,
+ * so every section is filled with a zeroed default here and the UI stays usable. Missing data must
+ * degrade to "not reported", never to a blank page.
+ */
 export async function storeDetail(storeId: string): Promise<PlatformStoreDetail> {
-  return rpc<PlatformStoreDetail>("platform_store_detail", { p_store: storeId });
+  const raw = await rpc<Partial<PlatformStoreDetail>>("platform_store_detail", { p_store: storeId });
+  return normaliseDetail(raw);
 }
+
+/**
+ * Fill in whatever the database did not send.
+ *
+ * Split out from `storeDetail` so it can be tested against a payload from the older function without
+ * standing up a Supabase client. The rule it encodes: a section the server did not report is empty and
+ * flagged, never missing -- a missing key here is a render crash, not a blank cell.
+ */
+export function normaliseDetail(raw: Partial<PlatformStoreDetail>): PlatformStoreDetail {
+  return {
+    store: raw.store as PlatformStoreDetail["store"],
+    totals: { ...EMPTY_TOTALS, ...raw.totals },
+    staff: raw.staff ?? [],
+    recent_sales: raw.recent_sales ?? [],
+    monthly_sales: raw.monthly_sales ?? [],
+    payment_mix: raw.payment_mix ?? [],
+    top_products: raw.top_products ?? [],
+    platform_actions: raw.platform_actions ?? [],
+    breakdown_available: raw.totals != null,
+  };
+}
+
+const EMPTY_TOTALS: PlatformTotals = {
+  sale_count: 0,
+  sales_cents: 0,
+  avg_sale_cents: 0,
+  last_sale_at: null,
+  product_count: 0,
+  low_stock_count: 0,
+  staff_count: 0,
+  active_staff_count: 0,
+  refund_count: 0,
+  refund_cents: 0,
+};
 
 export type CreateOwnerInput = {
   email: string;

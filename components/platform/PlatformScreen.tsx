@@ -473,7 +473,13 @@ function StoreDetailDialog({
             <Info label="Created" value={store ? new Date(store.created_at).toLocaleString() : "-"} />
             <Info
               label="Last sale"
-              value={detail.totals.last_sale_at ? new Date(detail.totals.last_sale_at).toLocaleString() : "never"}
+              value={
+                !detail.breakdown_available
+                  ? "not reported"
+                  : detail.totals.last_sale_at
+                    ? new Date(detail.totals.last_sale_at).toLocaleString()
+                    : "never"
+              }
             />
           </div>
 
@@ -482,6 +488,19 @@ function StoreDetailDialog({
               <ShieldAlert size={15} className="mt-0.5 shrink-0 text-danger" />
               Suspended {store?.suspended_at ? new Date(store.suspended_at).toLocaleDateString() : ""} —{" "}
               {store?.suspended_reason ?? "no reason recorded"}
+            </p>
+          )}
+
+          {/* The database predates the breakdown. Say so, because the zeroes below are placeholders
+              and an operator would otherwise read "0 sales" as fact. */}
+          {!detail.breakdown_available && (
+            <p className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm">
+              <RefreshCw size={15} className="mt-0.5 shrink-0" />
+              <span>
+                This project is still running the first version of the admin panel, so the figures below
+                are empty. Re-run <code className="num">supabase/migrations/0025_platform_admin.sql</code>{" "}
+                in the Supabase SQL editor to load the full breakdown.
+              </span>
             </p>
           )}
 
