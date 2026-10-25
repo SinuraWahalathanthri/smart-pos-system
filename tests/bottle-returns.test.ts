@@ -124,6 +124,26 @@ const lend = (qty: number) =>
     [store, milk, customer, qty],
   );
 
+/** A bill at the till carrying only a deposit: the customer keeps `qty` bottles and pays for them. */
+const depositSale = (qty: number) =>
+  asUser(
+    owner,
+    () =>
+      rpc<{ status: string; sale_id: string }>("complete_sale", [
+        JSON.stringify({
+          id: crypto.randomUUID(),
+          customer_id: customer,
+          subtotal_cents: 10000 * qty,
+          discount_cents: 0,
+          total_cents: 10000 * qty,
+          lines: [{ kind: "bottle_fee", product_id: milk, name: "Bottle deposit - Fresh Milk", qty,
+                    unit_price_cents: 10000, tax_rate_pct: 0, tax_cents: 0, line_total_cents: 10000 * qty }],
+          payments: [{ method: "cash", amount_cents: 10000 * qty }],
+        }),
+      ]),
+    store,
+  );
+
 describe("returning a bottle", () => {
   it("starts with nothing owed", async () => {
     expect(await outstanding()).toBe(0);
@@ -165,22 +185,39 @@ describe("returning a bottle", () => {
     expect(await outstanding()).toBe(1); // nothing was partially applied
   });
 
-  it("charges the 100 instead of taking the bottle back", async () => {
-    const out = await asUser(
-      owner,
-      () => rpc<{ charged_cents: number; outstanding: number }>("charge_bottle_fee", [customer, milk, 1]),
-      store,
-    );
-    expect(Number(out.charged_cents)).toBe(10000);
-    expect(out.outstanding).toBe(0);
+  it("charges the 100 instead of taking the bottle back, as a line on a bill", async () => {
+    const sale = await depositSale(1);
+    expect(sale.status).toBe("created");
     expect(await outstanding()).toBe(0);
+
+    // The money is on the sale and its payment, which is what the drawer and finance read.
+    const [row] = await rows<{ total_cents: string; bottle_fee_cents: string }>(
+      `select total_cents, bottle_fee_cents from sales where id = $1`, [sale.sale_id]);
+    expect(Number(row.total_cents)).toBe(10000);
+    expect(Number(row.bottle_fee_cents)).toBe(10000);
+    const [fee] = await rows<{ product_id: string; amount_cents: string }>(
+      `select product_id, amount_cents from bottle_ledger where sale_id = $1 and event = 'fee_charged'`, [sale.sale_id]);
+    expect(fee.product_id).toBe(milk);
+    expect(Number(fee.amount_cents)).toBe(10000);
   });
 
-  it("does not charge a second time for the same bottle", async () => {
-    // The double-charge bug: the loan was already settled by the fee.
+  it("does not settle the same bottle a second time", async () => {
+    // The double-charge bug: the loan was already settled by the fee. An offline till can still
+    // send such a bill - the money is real, so the sale stands, but the ledger is not charged again
+    // and the owner is asked to look at it.
+    const sale = await depositSale(1);
+    expect(await outstanding()).toBe(0);
+    expect(await rows(`select 1 from bottle_ledger where sale_id = $1 and event = 'fee_charged'`, [sale.sale_id])).toEqual([]);
+    expect((await rows(`select 1 from audit_logs where entity_id = $1 and action = 'bottle_deposit_excess'`, [sale.sale_id])).length).toBe(1);
+  });
+
+  it("is no longer callable outside a bill", async () => {
+    // A deposit taken by charge_bottle_fee() never reached a sale, a payment or the drawer.
+    await lend(1);
     await expect(
       asUser(owner, () => rpc("charge_bottle_fee", [customer, milk, 1]), store),
-    ).rejects.toThrow(/only has 0 bottle/i);
+    ).rejects.toThrow(/permission denied/i);
+    await asUser(owner, () => rpc("return_bottles", [customer, milk, 1, false]), store);
   });
 
   it("handles several bottles at once", async () => {
@@ -190,7 +227,7 @@ describe("returning a bottle", () => {
     await asUser(owner, () => rpc("return_bottles", [customer, milk, 2, false]), store);
     expect(await outstanding()).toBe(1);
 
-    await asUser(owner, () => rpc("charge_bottle_fee", [customer, milk, 1]), store);
+    await depositSale(1);
     expect(await outstanding()).toBe(0);
   });
 

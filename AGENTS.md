@@ -47,9 +47,52 @@ one household use their own numbers - there is no shared-number case. `find_cust
 matches the full number first, then the last 4+ digits.
 **Bottles are loans, not up-front fees.** Milk at 250 does not charge the 100 deposit; it records that
 the customer owes a bottle. `customer_bottles_outstanding()` = sold - returned - fee_charged.
-`return_bottles()` / `charge_bottle_fee()` both REFUSE to act beyond what is outstanding, so the till
-cannot hand out a free bottle or charge twice. `return_bottles()` also refuses a product that is not
-`is_returnable_bottle`.
+`return_bottles()` REFUSES to act beyond what is outstanding, so the till cannot hand out a free
+bottle, and refuses a product that is not `is_returnable_bottle`.
+**A deposit is a line on a bill, never a ledger row on its own (0027).** F7 "Keep" adds a `bottle_fee`
+line carrying the bottle's `product_id`; `complete_sale()` settles that loan from it. That is what puts
+the money in the sale's subtotal, its payments, the shift's cash and finance. `charge_bottle_fee()`
+wrote a ledger row with no sale behind it - cash nobody's report could see - and is now revoked from
+every client. The dashboard (`/bottles`) registers returns only. `complete_sale()` refuses a deposit
+for another shop's product, and settles no more than is owed: an offline bill that paid for a bottle
+already returned keeps its money but writes a `bottle_deposit_excess` audit row instead of a second
+settlement. The ledger amount is what the bill charged, not today's fee.
+**Nothing writes `bottle_ledger` directly.** 0027 dropped the authenticated INSERT policy from 0007,
+which let any till skip every guard. `bottles_returned` in a sale payload is capped at what is owed.
+**A refund or cancellation reverses its bottles with negative rows** (`reverse_sale_bottles()`); the
+ledger stays append-only and every SUM stays right. A refund cancels the loans its goods started; a
+cancellation also reverses the bill's empties and deposits. A loan is only reversed as far as it is
+still owed. Anything reading the ledger must sum `qty`, never count rows, and must filter `qty > 0`
+when it wants "when did this happen".
+**Never change a migration that has shipped.** 0026's `complete_sale` change was first written into
+0019; a live database had already run 0019, so it would never have seen it. The PGlite tests build a
+fresh database every run and cannot catch this - put the redefinition in a new migration.
+**A waiver forgives money, never the bottle.** `fee_waived` rows are reported by
+`customer_bottle_summary()` but deliberately NOT subtracted from `outstanding`; only a return or a
+`fee_charged` row settles a loan. Getting this wrong silently forgives every waived bottle.
+**Bottles are attributed to a customer, not to a bill.** `bottle_ledger` rows carry
+`customer_id` (and now `created_by`), so the owner can see who still has one and who handed it back.
+Walk-in sales have a null customer: they still move the shop total, and are shown as "Walk-in" rather
+than being given an invented debtor.
+**Every role reads the bottle book (`/bottles`).** A cashier hands the bottle over and takes it back,
+so a count they cannot see is a count the shop cannot trust. `permissions().viewBottles` is `true` for
+owner, supervisor and cashier, and `customer_bottle_summary()` / `bottle_totals()` / `bottle_events()` /
+`customer_bottles_by_product()` are per-shop, not per-role. Do not "tidy" this into `viewAnalytics`.
+A cashier reaches it with their own dashboard sign-in; the till deliberately has no link there, because
+the till is signed in as a device account and the dashboard would open with the device's role.
+**The /bottles headline numbers come from `bottle_totals()`, never from adding up the list.** The list
+defaults to customers still owing, one page of them, so summing it drops everyone who settled.
+**The till's F7 dialog and the dashboard form are the same component**
+(`components/bottles/ReturnBottlesForm.tsx`). The rule must not drift between the counter and the
+office. `BottleReturnDialog` is a thin wrapper; it needs an attached customer, because a return has to
+land on a person.
+**0026 adds `customer_bottle_summary`, `customer_bottles_by_product`, `bottle_events` and a
+`(store_id, created_at desc)` index on `bottle_ledger`.** The index is not decoration: all three
+functions scan one shop newest-first.
+**A new RPC listed in `revoke all on function ...` must also be listed in the `grant`** - and vice
+versa - unless it is internal (`bottles_owed`, `reverse_sale_bottles`) or retired
+(`charge_bottle_fee`), in which case it is revoked with no grant, on purpose. `tests/platform-admin.test.ts` calls every anon-executable RPC and expects
+`permission denied`, so a forgotten revoke is a test failure, not a silent hole.
 **`stock_on_hand` is never written directly.** `guard_stock_columns` zeroes it on INSERT and raises on
 UPDATE. Opening stock goes through `stock_movements` with type `opening` - `save_product` does this
 from the `opening_stock` key. Any new screen that sets stock must do the same.
@@ -184,3 +227,20 @@ new owner) in order there.
 PowerShell note: the shell is a persistent session, and an unterminated heredoc hangs it with no
 recovery except a reset. Write files with the editor tool rather than `node -e "..."`.
 
+## Compact (phone) till layout
+- `lib/viewport.ts` is the single source of truth for the breakpoint: `COMPACT_MAX_WIDTH = 1023`
+  mirrors Tailwind's `lg`, so JS and CSS never disagree. `useIsCompact()` is `useSyncExternalStore`
+  (server snapshot is always `false`), so the first client paint matches the server HTML.
+- Below `lg` the bill moves into `<Sheet>` and `<MobileDock>` replaces `<ShortcutBar>`. The scan bar
+  is deliberately *not* autofocused at compact width - it would raise the on-screen keyboard over the
+  product grid. Tap it explicitly instead.
+- Overlay z-index order is toast (40) < modal dialog / sheet / actions menu (50). Do not give a toast
+  a higher value than a modal: a modal must never be obscured by a transient message.
+- Keyboard hints (`Button keycap=`, `<Keycap>`) carry `.keycap-hint`, hidden under
+  `@media (pointer: coarse)`. A phone has no F-keys, so the hint would point at nothing.
+- Verify phone layout by driving Chrome over CDP with **both** `setDeviceMetricsOverride` (390x844)
+  and `setTouchEmulationEnabled`; without the second call `(pointer: coarse)` does not match and
+  keycap hints still render.
+- `next dev` refuses to start a second instance in the same directory. To test a change that the
+  running dev server has not picked up, restart it - a stale CSS chunk otherwise hides new rules
+  (the production build was already correct, which is what isolated this).

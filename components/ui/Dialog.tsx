@@ -67,7 +67,7 @@ export function Dialog({ title, onClose, onConfirm, children, footer, width = "m
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 px-4 pt-[8vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[8vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -104,7 +104,7 @@ export function Dialog({ title, onClose, onConfirm, children, footer, width = "m
 export function Keycap({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <kbd
-      className={`inline-flex min-w-6 items-center justify-center rounded-md border border-border border-b-2 bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-muted ${className}`}
+      className={`keycap-hint inline-flex min-w-6 items-center justify-center rounded-md border border-border border-b-2 bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-muted ${className}`}
     >
       {children}
     </kbd>
@@ -131,7 +131,7 @@ export function Button({ variant = "secondary", keycap, className = "", children
     >
       {children}
       {keycap && (
-        <span className="rounded border border-current/30 px-1 font-mono text-[10px] opacity-80">{keycap}</span>
+        <span className="keycap-hint rounded border border-current/30 px-1 font-mono text-[10px] opacity-80">{keycap}</span>
       )}
     </button>
   );

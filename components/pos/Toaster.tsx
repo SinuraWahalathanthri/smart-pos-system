@@ -14,7 +14,7 @@ const STYLE = {
 const ICON = { info: Info, success: CheckCircle2, warn: AlertTriangle, error: XCircle } as const;
 
 /** Non-blocking messages; never covers the bill (bottom-centre, above the shortcut bar). */
-export function Toaster() {
+export function Toaster({ raised = false }: { raised?: boolean }) {
   const toast = usePos((s) => s.toast);
 
   useEffect(() => {
@@ -28,7 +28,9 @@ export function Toaster() {
   if (!toast) return null;
   const Icon = ICON[toast.kind];
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-14 z-50 flex justify-center px-4">
+    <div
+      className={`pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 ${raised ? "bottom-24" : "bottom-14"}`}
+    >
       <div
         role="status"
         aria-live="polite"

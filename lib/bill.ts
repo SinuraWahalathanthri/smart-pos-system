@@ -2,14 +2,19 @@ import type { Cents } from "./money";
 import { lineTotal, taxInside } from "./money";
 import type { BillLine, BillSnapshot } from "./types";
 
-/** Glass-bottle milk: the customer returns an empty or LKR 100 is added (PLAN.md §4.8). */
+/**
+ * Glass-bottle milk: the bottle is a LOAN. It leaves the shop at LKR 250 with no deposit taken.
+ * The customer owes the bottle back, and only pays this deposit on a later visit if they keep it.
+ * Selling milk never adds it; F7 "Keep, charge" puts it on that later bill as a deposit row.
+ */
 export const BOTTLE_FEE: Cents = 10000;
-export const BOTTLE_FEE_LABEL = "Bottle not returned";
 
 export interface BillRow {
   key: string;
-  kind: "item" | "voided" | "bottle_fee";
+  kind: "item" | "voided" | "deposit";
   line?: BillLine;
+  /** Set on a deposit row: the bottled product whose loan it settles. */
+  depositProductId?: string;
   name: string;
   label?: string;
   qty: number;
@@ -25,17 +30,12 @@ export interface BillTotals {
   total: Cents;
   taxIncluded: Cents;
   bottleCount: number;
-  feeCount: number;
-  feeAmount: Cents;
+  /** Deposits taken on this bill for bottles the customer keeps. Part of subtotal and total. */
+  depositTotal: Cents;
 }
 
 export function bottleCount(lines: BillLine[]): number {
   return lines.reduce((n, l) => (!l.voided && l.returnableBottle ? n + l.qty : n), 0);
-}
-
-/** Bottles still owing a fee after returns and supervisor waivers. */
-export function feeCount(snapshot: BillSnapshot): number {
-  return Math.max(0, bottleCount(snapshot.lines) - snapshot.bottlesReturned - snapshot.feeWaived);
 }
 
 export function computeBill(snapshot: BillSnapshot): BillTotals {
@@ -73,22 +73,26 @@ export function computeBill(snapshot: BillSnapshot): BillTotals {
     });
   }
 
-  const owing = feeCount(snapshot);
-  const feeAmount = owing * BOTTLE_FEE;
-  if (owing > 0) {
+  // A discount is on the goods. It must not quietly eat into a deposit, which settles a debt.
+  const discount = Math.min(snapshot.discount, subtotal);
+
+  let depositTotal = 0;
+  for (const d of snapshot.deposits ?? []) {
+    if (d.qty <= 0) continue;
+    const total = lineTotal(d.unitPrice, d.qty);
+    depositTotal += total;
     rows.push({
-      key: "bottle-fee",
-      kind: "bottle_fee",
-      name: BOTTLE_FEE_LABEL,
-      qty: owing,
-      unitPrice: BOTTLE_FEE,
-      total: feeAmount,
-      note: "Locked",
+      key: `deposit-${d.productId}`,
+      kind: "deposit",
+      depositProductId: d.productId,
+      name: `Bottle deposit - ${d.name}`,
+      qty: d.qty,
+      unitPrice: d.unitPrice,
+      total,
     });
   }
-  subtotal += feeAmount;
+  subtotal += depositTotal;
 
-  const discount = Math.min(snapshot.discount, subtotal);
   return {
     rows,
     subtotal,
@@ -96,8 +100,7 @@ export function computeBill(snapshot: BillSnapshot): BillTotals {
     total: subtotal - discount,
     taxIncluded,
     bottleCount: bottleCount(snapshot.lines),
-    feeCount: owing,
-    feeAmount,
+    depositTotal,
   };
 }
 

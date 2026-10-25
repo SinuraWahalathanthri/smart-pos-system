@@ -8,6 +8,7 @@ import {
   Boxes,
   Building2,
   ClipboardCheck,
+  Droplets,
   Factory,
   LayoutDashboard,
   LogOut,
@@ -50,6 +51,10 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard, needs: "viewAnalytics", primary: true },
       { href: "/receipts", label: "Receipts", icon: Receipt, needs: "viewAnalytics" },
       { href: "/customers", label: "Customers", icon: UserRound, needs: "viewAnalytics", primary: true },
+      // Every role with its own dashboard sign-in, cashiers included. At the counter a cashier uses
+      // F7 instead: the till is signed in as a device account, so a link from there would open the
+      // dashboard with the device's role, not the cashier's.
+      { href: "/bottles", label: "Bottles", icon: Droplets, needs: "viewBottles" },
       { href: "/credit", label: "Credit", icon: Wallet, needs: "manageCredit" },
     ],
   },

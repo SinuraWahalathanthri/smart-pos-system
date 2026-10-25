@@ -57,10 +57,24 @@ export interface BillLine {
   voided?: { reason: string; by: string; at: number };
 }
 
+/**
+ * A bottle the attached customer keeps and pays the deposit for, on this bill.
+ *
+ * The deposit is a bill line rather than a ledger row on its own, so the money is in the sale's
+ * total, its payments and the shift's cash. complete_sale settles that loan from the line.
+ */
+export interface BottleDeposit {
+  /** The bottled product whose loan this settles. */
+  productId: string;
+  name: string;
+  qty: number;
+  unitPrice: Cents;
+}
+
 export interface BillSnapshot {
   lines: BillLine[];
-  bottlesReturned: number;
-  feeWaived: number;
+  /** Optional so bills saved by an older till (and fixtures) still load. */
+  deposits?: BottleDeposit[];
   discount: Cents;
   /** Set when the cashier attached a customer; every bottled line then belongs to that person. */
   customerId?: string;

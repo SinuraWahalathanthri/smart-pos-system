@@ -111,7 +111,7 @@ export function QtyDialog({ onClose }: { onClose: () => void }) {
 export function DiscountDialog({ onClose }: { onClose: () => void }) {
   const [value, setValue] = useState("");
   const snapshot = usePos(
-    useShallow((s) => ({ lines: s.lines, bottlesReturned: s.bottlesReturned, feeWaived: s.feeWaived, discount: 0 })),
+    useShallow((s) => ({ lines: s.lines, discount: 0 })),
   );
   const subtotal = useMemo(() => computeBill(snapshot).subtotal, [snapshot]);
 
@@ -273,7 +273,7 @@ export function SuccessDialog({ sale, change, onClose }: { sale: SaleRecord; cha
             <p className="num text-5xl font-bold">{formatMoney(change)}</p>
           </div>
         )}
-        {sale.bottleFeeCharged > 0 && <p className="text-sm text-warning">Includes bottle fee {formatMoney(sale.bottleFeeCharged)}</p>}
+        {sale.bottleFeeCharged > 0 && <p className="text-sm text-warning">Includes bottle deposit {formatMoney(sale.bottleFeeCharged)}</p>}
         {sale.customerId && (
           <div className="mt-1 w-full rounded-xl bg-primary-soft px-4 py-3 text-left text-primary">
             <p className="text-sm font-semibold">

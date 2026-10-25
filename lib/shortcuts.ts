@@ -47,7 +47,7 @@ export function shortcutForEvent(e: KeyboardEvent): string | null {
     case "F4": return "calc";
     case "F5": return "customer";
     case "F6": return "discount";
-    case "F7": return e.shiftKey ? "bottle-undo" : "bottle";
+    case "F7": return "bottle";
     case "F8": return "void";
     case "F9": return "hold";
     case "F10": return "exact";

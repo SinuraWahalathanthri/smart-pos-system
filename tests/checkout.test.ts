@@ -16,7 +16,7 @@ const line: BillLine = {
 const cashier = { id: "c1", name: "Nimal" };
 
 function snapshot(over: Partial<BillSnapshot> = {}): BillSnapshot {
-  return { lines: [line], bottlesReturned: 0, feeWaived: 0, discount: 0, ...over };
+  return { lines: [line], discount: 0, ...over };
 }
 
 /**

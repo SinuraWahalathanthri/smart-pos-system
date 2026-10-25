@@ -1,16 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { Lock, Pause, PackageOpen } from "lucide-react";
+import { Pause, PackageOpen, Trash2 } from "lucide-react";
 import { computeBill } from "@/lib/bill";
 import { formatMoney } from "@/lib/money";
 import { usePos } from "@/lib/store";
 import { Button } from "../ui/Dialog";
 
-export function BillPanel() {
+export function BillPanel({
+  embedded = false,
+  onVoid,
+}: {
+  /** Inside a sheet: no border or rounding, and the list scrolls within the sheet. */
+  embedded?: boolean;
+  /** Touch removal. Routed to the same supervisor-approved path as F8, never a direct delete. */
+  onVoid?: (lineId: string) => void;
+} = {}) {
   const lines = usePos((s) => s.lines);
-  const bottlesReturned = usePos((s) => s.bottlesReturned);
-  const feeWaived = usePos((s) => s.feeWaived);
+  const deposits = usePos((s) => s.deposits);
+  const removeDeposit = usePos((s) => s.removeDeposit);
   const discount = usePos((s) => s.discount);
   const selectedId = usePos((s) => s.selectedId);
   const lastAddedId = usePos((s) => s.lastAddedId);
@@ -24,8 +32,8 @@ export function BillPanel() {
   const customerBottles = usePos((s) => s.customerBottles);
 
   const bill = useMemo(
-    () => computeBill({ lines, bottlesReturned, feeWaived, discount }),
-    [lines, bottlesReturned, feeWaived, discount],
+    () => computeBill({ lines, deposits, discount }),
+    [lines, deposits, discount],
   );
   const itemCount = lines.filter((l) => !l.voided).reduce((n, l) => n + l.qty, 0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -34,20 +42,28 @@ export function BillPanel() {
     listRef.current?.querySelector<HTMLElement>('[data-selected="true"]')?.scrollIntoView({ block: "nearest" });
   }, [selectedId, lines.length]);
 
-  // Position numbers for item rows only (voided and fee rows are not numbered).
+  // Position numbers for item rows only (voided and deposit rows are not numbered).
   const numbers = useMemo(() => {
     let n = 0;
     return bill.rows.map((r) => (r.kind === "item" ? ++n : 0));
   }, [bill.rows]);
 
   return (
-    <section aria-label="Bill" className="flex min-h-0 flex-col rounded-xl border border-border bg-surface">
+    <section
+      aria-label="Bill"
+      className={
+        embedded
+          ? "flex min-h-0 flex-1 flex-col"
+          : "flex min-h-0 flex-col rounded-xl border border-border bg-surface"
+      }
+    >
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-muted">Current bill</h2>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-muted">
+            {embedded ? "Items" : "Current bill"}
+          </h2>
           <p className="text-sm text-muted">
             {itemCount} item{itemCount === 1 ? "" : "s"} &middot; {customerName ?? "Walk-in"}
-            {bottlesReturned > 0 && ` &middot; ${bottlesReturned} empty bottle${bottlesReturned > 1 ? "s" : ""} returned`}
           </p>
         </div>
         <Button variant="ghost" className="min-h-9 shrink-0 whitespace-nowrap px-2 text-xs" onClick={() => openDialog({ type: "held" })}>
@@ -86,27 +102,59 @@ export function BillPanel() {
                   key={r.key}
                   data-selected={selected ? "true" : "false"}
                   onClick={() => r.kind === "item" && select(r.key)}
-                  className={`grid cursor-default grid-cols-[1.6rem_1fr_auto] items-center gap-x-2 border-b border-border/60 px-3 py-2 ${
+                  className={`grid cursor-default items-center gap-x-2 border-b border-border/60 px-3 py-2 ${
+                    onVoid || r.kind === "deposit" ? "grid-cols-[1.6rem_1fr_auto_2rem]" : "grid-cols-[1.6rem_1fr_auto]"
+                  } ${
                     selected ? "bg-primary-soft" : ""
                   } ${r.line && r.line.id === lastAddedId ? "flash-in" : ""}`}
                 >
                   <span className="text-center text-xs text-muted">
-                    {selected ? "▶" : r.kind === "item" ? numbers[i] : r.kind === "bottle_fee" ? <Lock size={13} className="inline" /> : "×"}
+                    {selected ? "▶" : r.kind === "item" ? numbers[i] : r.kind === "deposit" ? "" : "×"}
                   </span>
                   <div className={`min-w-0 ${r.kind === "voided" ? "line-through opacity-60" : ""}`}>
-                    <p className={`truncate text-[17px] font-medium ${r.kind === "bottle_fee" ? "text-warning" : ""}`}>
+                    <p className={`truncate text-[17px] font-medium ${r.kind === "deposit" ? "text-warning" : ""}`}>
                       {r.name}
                       {r.label && <span className="ml-1.5 rounded bg-surface-2 px-1.5 py-0.5 text-sm font-semibold">{r.label}</span>}
                     </p>
                     <p className="num text-xs text-muted">
                       {r.qty} × {formatMoney(r.unitPrice, false)}
                       {r.kind === "voided" && r.note && <span className="ml-2 font-semibold text-danger no-underline">Voided: {r.note}</span>}
-                      {r.kind === "bottle_fee" && <span className="ml-2 font-semibold">Supervisor can waive (F8)</span>}
+                      {r.kind === "deposit" && <span className="ml-2">Customer keeps the bottle</span>}
                     </p>
                   </div>
                   <span className={`num text-[17px] font-semibold ${r.kind === "voided" ? "text-muted line-through" : ""}`}>
                     {formatMoney(r.total, false)}
                   </span>
+                  {/* Touch replacement for Del/F8. Only on live item rows, and only where the screen
+                      passed a handler, so a cashier without approval rights cannot reach it. */}
+                  {onVoid && r.kind === "item" && r.line && !r.line.voided && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onVoid(r.line!.id);
+                      }}
+                      aria-label={`Remove ${r.name} from the bill`}
+                      className="-mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted active:bg-danger-soft active:text-danger"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                  {/* Nothing has been paid yet, so a deposit comes off without a supervisor - and
+                      leaving it off leaves the bottle owed, which is the safe direction. */}
+                  {r.kind === "deposit" && r.depositProductId && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeDeposit(r.depositProductId!);
+                      }}
+                      aria-label={`Take one ${r.name} off the bill`}
+                      className="-mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted active:bg-danger-soft active:text-danger"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </li>
               );
             })}

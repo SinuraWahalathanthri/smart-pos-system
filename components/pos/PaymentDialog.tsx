@@ -29,8 +29,8 @@ export function PaymentDialog({ exact, onClose }: { exact?: boolean; onClose: ()
   const snapshot = usePos(
     useShallow((s) => ({
       lines: s.lines,
-      bottlesReturned: s.bottlesReturned,
-      feeWaived: s.feeWaived,
+      // Without this a deposit shown on the bill would be missing from the sale actually recorded.
+      deposits: s.deposits,
       discount: s.discount,
       customerId: s.customerId,
       customerName: s.customerName,

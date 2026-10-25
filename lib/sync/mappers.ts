@@ -124,7 +124,9 @@ export function toSalePayload(sale: SaleRecord): Record<string, unknown> {
     bottle_fee_cents: sale.bottleFeeCharged,
     customer_id: uuidOrNull(sale.customerId),
     lines: sale.lines.map((l) => ({
-      product_id: l.kind === "item" ? uuidOrNull(l.productId) : null,
+      // A deposit line carries the bottled product it settles. An older till's fee line used the
+      // placeholder "bottle-fee", which is not a uuid and so still maps to null.
+      product_id: uuidOrNull(l.productId),
       pack_size_id: uuidOrNull(l.packSizeId),
       kind: l.kind,
       name: l.name,

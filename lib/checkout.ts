@@ -21,42 +21,48 @@ export function buildSale(
   const voidedLines: SaleRecord["voidedLines"] = [];
 
   for (const r of bill.rows) {
-    if (r.kind === "item" && r.line) {
-      lines.push({
-        productId: r.line.productId,
-        packSizeId: r.line.packSizeId,
-        name: r.line.name,
-        label: r.line.label,
-        qty: r.line.qty,
-        unitPrice: r.line.unitPrice,
-        taxRate: r.line.taxRate,
-        lineTotal: r.total,
-        taxAmount: taxInside(r.total, r.line.taxRate),
-        kind: "item",
-      });
-    } else if (r.kind === "bottle_fee") {
-      lines.push({
-        productId: "bottle-fee",
-        name: r.name,
-        qty: r.qty,
-        unitPrice: r.unitPrice,
-        taxRate: 0,
-        lineTotal: r.total,
-        taxAmount: 0,
-        kind: "bottle_fee",
-      });
-    } else if (r.kind === "voided" && r.line?.voided) {
-      voidedLines.push({
-        productId: r.line.productId,
-        packSizeId: r.line.packSizeId,
-        name: r.name,
-        label: r.label,
-        qty: r.qty,
-        unitPrice: r.unitPrice,
-        reason: r.line.voided.reason,
-        by: r.line.voided.by,
-      });
-    }
+    if (r.kind !== "item" || !r.line) continue;
+    lines.push({
+      productId: r.line.productId,
+      packSizeId: r.line.packSizeId,
+      name: r.line.name,
+      label: r.line.label,
+      qty: r.line.qty,
+      unitPrice: r.line.unitPrice,
+      taxRate: r.line.taxRate,
+      lineTotal: r.total,
+      taxAmount: taxInside(r.total, r.line.taxRate),
+      kind: "item",
+    });
+  }
+
+  // A deposit names the bottle it is for, so the server can settle exactly that loan.
+  for (const r of bill.rows) {
+    if (r.kind !== "deposit" || !r.depositProductId) continue;
+    lines.push({
+      productId: r.depositProductId,
+      name: r.name,
+      qty: r.qty,
+      unitPrice: r.unitPrice,
+      taxRate: 0,
+      lineTotal: r.total,
+      taxAmount: 0,
+      kind: "bottle_fee",
+    });
+  }
+
+  for (const r of bill.rows) {
+    if (r.kind !== "voided" || !r.line?.voided) continue;
+    voidedLines.push({
+      productId: r.line.productId,
+      packSizeId: r.line.packSizeId,
+      name: r.name,
+      label: r.label,
+      qty: r.qty,
+      unitPrice: r.unitPrice,
+      reason: r.line.voided.reason,
+      by: r.line.voided.by,
+    });
   }
 
   const tendered = payment.method === "cash" ? (payment.tendered ?? bill.total) : undefined;
@@ -75,8 +81,12 @@ export function buildSale(
       discount: bill.discount,
       total: bill.total,
       taxIncluded: bill.taxIncluded,
-      bottlesReturned: snapshot.bottlesReturned,
-      bottleFeeCharged: bill.feeAmount,
+      // Empties are registered per customer by F7 (return_bottles), not counted on the bill: an
+      // empty handed back settles an earlier loan, and a bottle taken now starts a new one.
+      bottlesReturned: 0,
+      // Selling a bottle takes no deposit. A deposit on this bill is for a bottle the customer
+      // keeps from an earlier loan; the server recomputes this from the lines anyway.
+      bottleFeeCharged: bill.depositTotal,
       customerId: snapshot.customerId,
       customerName: snapshot.customerName,
       payments: [{ method: payment.method, amount: bill.total, tendered, change: tendered !== undefined ? change : undefined, ref: payment.ref }],

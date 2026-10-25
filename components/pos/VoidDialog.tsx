@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Minus, Plus, ScanLine } from "lucide-react";
-import { BOTTLE_FEE, computeBill } from "@/lib/bill";
 import { formatMoney } from "@/lib/money";
 import { playCue } from "@/lib/sound";
 import { usePos } from "@/lib/store";
@@ -25,10 +24,7 @@ function barcodeOf(line: BillLine, products: Product[]): string | undefined {
  */
 export function VoidDialog({ lineId, approver, products, onClose }: { lineId: string; approver: string; products: Product[]; onClose: () => void }) {
   const lines = usePos((s) => s.lines);
-  const bottlesReturned = usePos((s) => s.bottlesReturned);
-  const feeWaived = usePos((s) => s.feeWaived);
-  const discount = usePos((s) => s.discount);
-  const { voidLine, waiveFee, notify } = usePos.getState();
+  const { voidLine, notify } = usePos.getState();
 
   const [targetId, setTargetId] = useState(lineId);
   const [scan, setScan] = useState("");
@@ -36,7 +32,6 @@ export function VoidDialog({ lineId, approver, products, onClose }: { lineId: st
   const [reason, setReason] = useState(REASONS[0]);
   const [shakeRef, shake] = useShake<HTMLDivElement>();
 
-  const bill = useMemo(() => computeBill({ lines, bottlesReturned, feeWaived, discount }), [lines, bottlesReturned, feeWaived, discount]);
   const target = lines.find((l) => l.id === targetId && !l.voided);
 
   function retarget(id: string) {
@@ -76,13 +71,6 @@ export function VoidDialog({ lineId, approver, products, onClose }: { lineId: st
     voidLine(target.id, qty, reason, approver);
     playCue("attention");
     notify(`Removed ${qty} × ${target.name}${target.label ? " " + target.label : ""} (${reason})`, "success");
-    onClose();
-  }
-
-  function waive() {
-    waiveFee();
-    notify(`Bottle fee waived by ${approver}`, "success");
-    playCue("attention");
     onClose();
   }
 
@@ -168,17 +156,6 @@ export function VoidDialog({ lineId, approver, products, onClose }: { lineId: st
               <span className="text-xs">of {target.qty}</span>
             </div>
           </div>
-        </div>
-      )}
-
-      {bill.feeCount > 0 && (
-        <div className="mt-4 flex items-center justify-between rounded-lg bg-warning-soft px-3 py-2 text-warning">
-          <span className="text-sm font-medium">
-            Bottle fee on this bill: {bill.feeCount} × {formatMoney(BOTTLE_FEE, false)}
-          </span>
-          <Button className="min-h-9" onClick={waive}>
-            Waive one fee
-          </Button>
         </div>
       )}
     </Dialog>

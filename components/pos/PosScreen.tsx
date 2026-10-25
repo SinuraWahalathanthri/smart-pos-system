@@ -13,15 +13,18 @@ import { shouldOpenGate, usePos } from "@/lib/store";
 import { asSbClient, getSupabase, isConnected } from "@/lib/supabase/client";
 import { startSync } from "@/lib/sync/engine";
 import type { PackSize, Product } from "@/lib/types";
+import { useIsCompact, useStoredDockSide } from "@/lib/viewport";
 import { ApprovalDialog } from "./ApprovalDialog";
 import { BillPanel } from "./BillPanel";
 import { CalculatorDialog } from "./CalculatorDialog";
 import { Header } from "./Header";
+import { AddedToast, MobileDock } from "./MobileDock";
 import { PaymentDialog } from "./PaymentDialog";
 import { PickerDialog, type PickItem } from "./PickerDialog";
 import { ALL, categoriesOf, ProductGrid } from "./ProductGrid";
 import { ScanBar } from "./ScanBar";
 import { ShortcutBar } from "./ShortcutBar";
+import { Sheet } from "../ui/Sheet";
 import { DiscountDialog, HeldDialog, HelpDialog, LockScreen, QtyDialog, SuccessDialog } from "./SmallDialogs";
 import { CustomerDialog } from "./CustomerDialog";
 import { CustomerGate, type CustomerCard } from "./CustomerGate";
@@ -51,6 +54,17 @@ export function PosScreen() {
   const gating = usePos((s) => s.gating);
   const billCustomer = usePos((s) => s.customerId);
   const billLineCount = usePos((s) => s.lines.length);
+
+  // Compact layout: the bill moves into a sheet and the dock appears (phones, portrait tablets).
+  const compact = useIsCompact();
+  const [billOpen, setBillOpen] = useState(false);
+  // Kept separate from `toast` so a stock warning is not overwritten by the next product tapped.
+  const [added, setAdded] = useState<{ name: string; label?: string; qty: number } | null>(null);
+  const [dock] = useStoredDockSide();
+  const itemCount = usePos((s) =>
+    s.lines.filter((l) => !l.voided).reduce((n, l) => n + l.qty, 0),
+  );
+  const billTotal = usePos((s) => computeBill(s.snapshot()).total);
 
   useEffect(() => {
     void ensureSeeded();
@@ -117,9 +131,20 @@ export function PosScreen() {
   }, []);
 
   // Return focus to the scan bar whenever nothing is open (DESIGN.md §7.1).
+  // Not on compact screens: focusing an input there raises the on-screen keyboard over the product
+  // grid, which is the main surface on a phone. The scan bar is tapped explicitly instead.
   useEffect(() => {
-    if (hydrated && session && !dialog && !approval && !locked) focusScan();
-  }, [hydrated, session, dialog, approval, locked, focusScan]);
+    if (!compact && hydrated && session && !dialog && !approval && !locked) focusScan();
+  }, [compact, hydrated, session, dialog, approval, locked, focusScan]);
+
+  // A dialog opened from inside the invoice sheet (pay, void, bottles) takes over the screen; leaving
+  // the sheet mounted behind it stacks two overlays and strands the operator on it afterwards.
+  // Adjusted during render rather than in an effect so the sheet never paints behind the dialog.
+  const [prevDialog, setPrevDialog] = useState(dialog);
+  if (dialog !== prevDialog) {
+    setPrevDialog(dialog);
+    if (dialog) setBillOpen(false);
+  }
 
   const addWithChecks = useCallback((p: Product, pack?: PackSize) => {
     const s = usePos.getState();
@@ -129,10 +154,15 @@ export function PosScreen() {
       playCue("error");
       return;
     }
+    // Read before addProduct: it resets pendingQty to 1 as part of adding.
+    const qty = s.pendingQty;
     s.addProduct(p, pack);
     playCue("ok");
     if (out) s.notify(`Stock shows 0 for ${p.name}${pack ? " " + pack.label : ""}. Check the shelf.`, "warn");
-  }, []);
+    // Confirmation for touch: on a phone the bill is offscreen, so a tap otherwise looks like nothing
+    // happened. Rendered on the till screen because only it knows the layout.
+    if (compact) setAdded({ name: p.name, label: pack?.label, qty });
+  }, [compact]);
 
   const pickProduct = useCallback(
     (p: Product) => {
@@ -159,11 +189,12 @@ export function PosScreen() {
     [lookup, addWithChecks, pickProduct],
   );
 
-  const startVoid = useCallback(async () => {
+  const startVoid = useCallback(async (lineId?: string) => {
     const s = usePos.getState();
     const active = activeLines(s.lines);
     if (active.length === 0) return s.notify("Nothing on the bill to remove", "warn");
-    const target = active.find((l) => l.id === s.selectedId) ?? active[active.length - 1];
+    // A tapped row names its line; the keyboard path uses the selection.
+    const target = (lineId ? active.find((l) => l.id === lineId) : undefined) ?? active.find((l) => l.id === s.selectedId) ?? active[active.length - 1];
     playCue("attention");
     const who = await s.requestApproval(
       `Remove from bill: ${target.name}${target.label ? " " + target.label : ""} (${target.qty} × ${formatMoney(target.unitPrice, false)})`,
@@ -174,7 +205,7 @@ export function PosScreen() {
 
   const hold = useCallback(async () => {
     const s = usePos.getState();
-    if (s.lines.length === 0) return s.openDialog({ type: "held" });
+    if (s.lines.length === 0 && !s.deposits?.length) return s.openDialog({ type: "held" });
     await getDb().held.add({
       id: newId(),
       createdAt: Date.now(),
@@ -198,7 +229,6 @@ export function PosScreen() {
         case "discount":
           return s.lines.length ? s.openDialog({ type: "discount" }) : s.notify("Add items before a discount", "warn");
         case "bottle": return s.openDialog({ type: "bottles" });
-        case "bottle-undo": return s.openDialog({ type: "bottles" });
         case "void": return void startVoid();
         case "hold": return void hold();
         case "exact":
@@ -308,15 +338,53 @@ export function PosScreen() {
   return (
     <div className="flex h-dvh flex-col">
       <Header />
-      <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(380px,34%)] gap-4 p-4">
+      {/* One column on compact screens (grid only, bill in the sheet); two columns from lg up. */}
+      <main
+        className={`grid min-h-0 flex-1 gap-4 p-4 ${
+          compact ? "grid-cols-[minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_minmax(380px,34%)]"
+        }`}
+      >
         <div className="flex min-h-0 flex-col gap-3">
           <ScanBar ref={scanRef} onScan={handleScan} onEmptyEnter={() => runAction("pay")} />
           <ProductGrid products={products} loading={productsLoading} category={category} onCategory={setCategory} onPick={pickProduct} />
         </div>
-        <BillPanel />
+        {!compact && <BillPanel onVoid={(id) => void startVoid(id)} />}
       </main>
-      <ShortcutBar onRun={runAction} />
-      <Toaster />
+      {/* On compact screens the dock's action menu replaces this strip, and the height it frees up
+          goes to the product grid. */}
+      {!compact && <ShortcutBar onRun={runAction} />}
+      <Toaster raised={compact} />
+
+      {compact && (
+        <MobileDock
+          itemCount={itemCount}
+          total={billTotal}
+          hasLines={itemCount > 0}
+          side={dock}
+          onRun={runAction}
+          onOpenBill={() => setBillOpen(true)}
+        />
+      )}
+
+      {compact && billOpen && (
+        <Sheet title="Invoice" wide onClose={() => setBillOpen(false)}>
+          <BillPanel embedded onVoid={(id) => void startVoid(id)} />
+        </Sheet>
+      )}
+
+      {compact && added && !billOpen && (
+        <AddedToast
+          name={added.name}
+          label={added.label}
+          qty={added.qty}
+          itemCount={itemCount}
+          onView={() => {
+            setAdded(null);
+            setBillOpen(true);
+          }}
+          onDone={() => setAdded(null)}
+        />
+      )}
 
       {dialog?.type === "weight" && (
         <WeightPicker
@@ -344,6 +412,7 @@ export function PosScreen() {
       {dialog?.type === "qty" && <QtyDialog onClose={close} />}
       {dialog?.type === "discount" && <DiscountDialog onClose={close} />}
       {dialog?.type === "customer" && <CustomerDialog onClose={close} />}
+      {dialog?.type === "bottles" && <BottleReturnDialog onClose={close} />}
       {gateOpen && <CustomerGate onDone={finishGate} />}
       {dialog?.type === "void" && <VoidDialog lineId={dialog.lineId} approver={dialog.approver} products={products} onClose={close} />}
       {dialog?.type === "success" && <SuccessDialog sale={dialog.sale} change={dialog.change} onClose={close} />}

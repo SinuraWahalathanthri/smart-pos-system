@@ -14,8 +14,10 @@ import { useSync } from "@/lib/sync/engine";
 import {
   ACCENT_PRESETS,
   getStoredAccent,
+  getStoredDockSide,
   getStoredMode,
   setAccent,
+  setDockSide,
   setMode,
   type ThemeMode,
 } from "@/lib/theme";
@@ -25,6 +27,7 @@ function ThemeMenu() {
   const [mode, setModeState] = useState<ThemeMode>("system");
   const [accent, setAccentState] = useState("#1d4ed8");
   const [muted, setMutedState] = useState(false);
+  const [dockSide, setDockSideState] = useState<"left" | "right">("right");
   const ref = useRef<HTMLDivElement>(null);
 
   // Read the saved choices when the menu opens (browser storage isn't available during server render).
@@ -33,6 +36,7 @@ function ThemeMenu() {
       setModeState(getStoredMode());
       setAccentState(getStoredAccent());
       setMutedState(isMuted());
+      setDockSideState(getStoredDockSide());
     }
     setOpen((o) => !o);
   }
@@ -121,6 +125,26 @@ function ThemeMenu() {
             </label>
           </div>
           <p className="mt-2 text-xs text-muted">Text contrast is adjusted automatically.</p>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Mobile buttons</p>
+          <div className="mb-2 flex gap-2">
+            {(["left", "right"] as const).map((side) => (
+              <button
+                key={side}
+                type="button"
+                aria-pressed={dockSide === side}
+                onClick={() => {
+                  setDockSide(side);
+                  setDockSideState(side);
+                }}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium capitalize ${
+                  dockSide === side ? "border-primary bg-primary-soft text-primary" : "border-border hover:bg-surface-2"
+                }`}
+              >
+                {side}
+              </button>
+            ))}
+          </div>
+          <p className="mb-3 text-xs text-muted">Which edge the invoice button sits on, for one-handed use.</p>
           <button
             type="button"
             onClick={() => {
@@ -246,7 +270,7 @@ function Clock() {
       clearInterval(every);
     };
   }, []);
-  return <span className="num text-sm text-muted">{now ? now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "--:--"}</span>;
+  return <span className="num hidden text-sm text-muted sm:inline">{now ? now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "--:--"}</span>;
 }
 
 export function Header() {
@@ -259,17 +283,17 @@ export function Header() {
   const canLeaveTill = session?.role === "owner" || session?.role === "supervisor";
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
-      <div className="flex items-center gap-2">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-2 sm:px-4">
+      <div className="flex shrink-0 items-center gap-2">
         <span className="grid h-7 w-7 place-items-center rounded-md bg-primary text-sm font-bold text-primary-fg">
           {shopName[0]}
         </span>
-        <span className="font-semibold">{shopName}</span>
+        <span className="hidden font-semibold sm:inline">{shopName}</span>
       </div>
-      <span className="text-sm text-muted">
+      <span className="hidden min-w-0 truncate text-sm text-muted sm:inline">
         {session?.name} <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs capitalize">{session?.role}</span>
       </span>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
         {canLeaveTill && (
           <Link
             href="/dashboard"

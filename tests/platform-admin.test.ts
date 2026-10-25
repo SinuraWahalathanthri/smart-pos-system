@@ -238,6 +238,11 @@ describe("0025 platform admin", () => {
       [`select public.platform_set_store_active($1,$2,$3)`, [nothing, false, "r"]],
       [`select public.update_store_details('S',null,null,null,'LKR',0,5,true)`, []],
       [`select public.complete_password_change()`, []],
+      // 0027: the bottle book's shop totals, and the internals no client may call at all.
+      [`select public.bottle_totals()`, []],
+      [`select public.bottles_owed($1,$2)`, [nothing, nothing]],
+      [`select public.reverse_sale_bottles($1,$2)`, [nothing, true]],
+      [`select public.charge_bottle_fee($1,$2,$3)`, [nothing, nothing, 1]],
     ];
 
     await db.exec(`set role anon`);

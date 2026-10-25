@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addLine, BOTTLE_FEE, computeBill, voidQty } from "../lib/bill";
+import { addLine, computeBill, voidQty } from "../lib/bill";
 import { ean13CheckDigit, isValidEan13, makeEan13 } from "../lib/barcode";
 import { evaluate } from "../lib/calc";
 import { formatMoney, parseMoneyInput, priceForWeight, taxInside, toCents } from "../lib/money";
@@ -17,8 +17,6 @@ const biscuit = { productId: "marie", name: "Marie Biscuit", qty: 1, unitPrice: 
 
 const snap = (lines: BillLine[], extra: Partial<BillSnapshot> = {}): BillSnapshot => ({
   lines,
-  bottlesReturned: 0,
-  feeWaived: 0,
   discount: 0,
   ...extra,
 });
@@ -62,25 +60,22 @@ describe("bill", () => {
     lines = addLine(lines, { ...curry, packSizeId: "500", label: "500 g", unitPrice: 88000 }).lines;
     expect(lines).toHaveLength(2);
   });
-  it("adds the LKR 100 fee for a milk bottle with no empty returned", () => {
+  it("takes no deposit for a milk bottle: the bottle leaves as a loan", () => {
     const bill = computeBill(snap(addLine([], milk).lines));
-    expect(bill.feeCount).toBe(1);
-    expect(bill.total).toBe(toCents(250) + BOTTLE_FEE);
-    expect(bill.rows.some((r) => r.kind === "bottle_fee")).toBe(true);
+    expect(bill.total).toBe(toCents(250));
+    expect(bill.bottleCount).toBe(1);
+    expect(bill.rows.map((r) => r.kind)).toEqual(["item"]);
   });
-  it("charges the fee only on bottles without an empty (3 milks, 2 empties -> LKR 850)", () => {
+  it("keeps bottles off the money entirely, however many are sold", () => {
     const lines = addLine([], { ...milk, qty: 3 }).lines;
-    const bill = computeBill(snap(lines, { bottlesReturned: 2 }));
-    expect(bill.total).toBe(toCents(850));
+    const bill = computeBill(snap(lines));
+    expect(bill.total).toBe(toCents(750));
+    expect(bill.bottleCount).toBe(3);
   });
-  it("charges no fee when the empty is returned", () => {
-    const bill = computeBill(snap(addLine([], milk).lines, { bottlesReturned: 1 }));
-    expect(bill.total).toBe(toCents(250));
-    expect(bill.rows.some((r) => r.kind === "bottle_fee")).toBe(false);
-  });
-  it("lets a supervisor waive the fee", () => {
-    const bill = computeBill(snap(addLine([], milk).lines, { feeWaived: 1 }));
-    expect(bill.total).toBe(toCents(250));
+  it("counts only bottles still on the bill after a void", () => {
+    const lines = addLine([], { ...milk, qty: 3 }).lines;
+    const after = voidQty(lines, lines[0].id, 1, "Wrong item", "Kamal", 1000);
+    expect(computeBill(snap(after)).bottleCount).toBe(2);
   });
   it("includes the tax contained in tax-inclusive prices", () => {
     const bill = computeBill(snap(addLine([], { ...biscuit, unitPrice: 11800 }).lines));

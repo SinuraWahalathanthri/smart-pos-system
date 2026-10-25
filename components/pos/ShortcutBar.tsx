@@ -3,7 +3,13 @@
 import { Keycap } from "../ui/Dialog";
 import { SHORTCUTS } from "@/lib/shortcuts";
 
-/** Bottom strip of active shortcuts; each is also a button (mouse works for everything). */
+/**
+ * Bottom strip of active shortcuts; each is also a button (mouse works for everything).
+ *
+ * On touch devices the keycaps are hidden by CSS (`.keycap-hint` under `pointer: coarse`): there is
+ * no F8 to press. Doing it in CSS rather than reading matchMedia during render keeps the server HTML
+ * and the first client render identical, so hydration never disagrees on a touch screen.
+ */
 export function ShortcutBar({ onRun }: { onRun: (id: string) => void }) {
   return (
     <nav aria-label="Shortcuts" className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-surface px-3">

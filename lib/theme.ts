@@ -119,3 +119,27 @@ export function setAccent(hex: string): void {
 
 /** Source for the inline <head> script. */
 export const themeBootstrapScript = `(${applyThemeFromStorage.toString()})()`;
+
+/**
+ * Which edge the mobile dock sits on. A shopkeeper holding the phone in one hand needs the invoice
+ * button under that thumb, and which hand that is depends on the person, not the device.
+ */
+export const DOCK_SIDE_KEY = "pos-dock-side";
+export type DockSide = "left" | "right";
+
+export function getStoredDockSide(): DockSide {
+  try {
+    return localStorage.getItem(DOCK_SIDE_KEY) === "left" ? "left" : "right";
+  } catch {
+    return "right";
+  }
+}
+
+export function setDockSide(side: DockSide): void {
+  try {
+    localStorage.setItem(DOCK_SIDE_KEY, side);
+  } catch {
+    /* storage blocked: the choice just won't persist */
+  }
+  window.dispatchEvent(new Event("pos-dock-side"));
+}

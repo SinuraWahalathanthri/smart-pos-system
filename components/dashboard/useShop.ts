@@ -121,6 +121,10 @@ export function permissions(role: Role | undefined, isPlatformAdmin = false) {
     manageStaff: role === "owner",
     manageProducts: role === "owner" || role === "supervisor",
     viewAnalytics: role === "owner" || role === "supervisor",
+    // Bottles are the one report every role reads. A cashier hands the bottle over and takes it
+    // back, so a count they cannot see is a count the shop cannot trust. The ledger RPCs are
+    // per-shop rather than per-role for the same reason.
+    viewBottles: true,
     // Lending money and recording repayments are owner/supervisor decisions, never a cashier's.
     manageCredit: role === "owner" || role === "supervisor",
     settleCredit: role === "owner" || role === "supervisor",

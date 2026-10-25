@@ -56,7 +56,7 @@ export function ProductTile({ product, onPick }: { product: Product; onPick: (p:
       }`}
     >
       <div
-        className="relative flex h-20 items-center justify-center"
+        className="relative flex h-16 items-center justify-center sm:h-20"
         style={{ background: product.imageUrl ? undefined : `${product.color}22` }}
       >
         {product.imageUrl ? (
@@ -148,7 +148,7 @@ export function ProductGrid({ products, loading, category, onCategory, onPick }:
       </div>
       <div
         onKeyDown={onKeyDown}
-        className="scroll-thin grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] content-start gap-3 overflow-y-auto pr-1"
+        className="scroll-thin grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(140px,1fr))] content-start gap-2 overflow-y-auto pb-24 pr-1 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:gap-3 lg:pb-0"
       >
         {shown.map((p) => (
           <ProductTile key={p.id} product={p} onPick={onPick} />

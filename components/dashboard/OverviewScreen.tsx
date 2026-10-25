@@ -209,17 +209,28 @@ function Overview({
     </div>
   );
 }
-type Debtor = { customer_id: string; name: string; phone: string; bottles_out: number; last_sale_at: string | null };
+type Debtor = {
+  customer_id: string;
+  name: string;
+  phone: string | null;
+  outstanding: number;
+  worth_cents: number;
+  last_out_at: string | null;
+};
 /**
  * Who still has the shop's bottles. This is the list the owner asked for: a customer who never
- * brought the bottle back shows up here until it is returned or the deposit is charged.
+ * brought the bottle back shows up here until it is returned or the deposit is charged. The full
+ * ledger - every bottle out, back and charged, per customer - lives on /bottles.
  */
 function BottlesOwed({ money }: { money: (c: number) => string }) {
   const [rows, setRows] = useState<Debtor[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     void (async () => {
-      const { data } = await getSupabase().rpc("customers_with_bottles", { p_limit: 50 });
+      const { data } = await getSupabase().rpc("customer_bottle_summary", {
+        p_only_outstanding: true,
+        p_limit: 10,
+      });
       setRows((data as Debtor[] | null) ?? []);
       setLoading(false);
     })();
@@ -237,25 +248,32 @@ function BottlesOwed({ money }: { money: (c: number) => string }) {
   }
   return (
     <section>
-      <h2 className="mb-2 font-semibold">Bottles owed</h2>
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
-        <table className="w-full text-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="font-semibold">Bottles owed</h2>
+        <Link href="/bottles" className="text-sm text-primary underline-offset-2 hover:underline">
+          All bottles
+        </Link>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-surface-2 text-left text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-2">Customer</th>
               <th className="px-4 py-2">Mobile</th>
               <th className="px-4 py-2 text-right">Bottles</th>
-              <th className="px-4 py-2 text-right">Last visit</th>
+              <th className="px-4 py-2 text-right">Worth</th>
+              <th className="px-4 py-2 text-right">Last out</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.customer_id} className="border-t border-border">
                 <td className="px-4 py-2 font-medium">{r.name}</td>
-                <td className="px-4 py-2 font-mono">{r.phone}</td>
-                <td className="px-4 py-2 text-right font-mono text-warning">{r.bottles_out}</td>
+                <td className="px-4 py-2 font-mono">{r.phone ?? "-"}</td>
+                <td className="px-4 py-2 text-right font-mono text-warning">{r.outstanding}</td>
+                <td className="px-4 py-2 text-right font-mono">{money(Number(r.worth_cents))}</td>
                 <td className="px-4 py-2 text-right text-muted">
-                  {r.last_sale_at ? new Date(r.last_sale_at).toLocaleDateString() : "-"}
+                  {r.last_out_at ? new Date(r.last_out_at).toLocaleDateString() : "-"}
                 </td>
               </tr>
             ))}
@@ -263,7 +281,8 @@ function BottlesOwed({ money }: { money: (c: number) => string }) {
         </table>
       </div>
       <p className="mt-2 text-xs text-muted">
-        Returned at the till with F7, once the customer is attached to the bill.
+        Returned at the till with F7, once the customer is attached to the bill, or from the Bottles
+        screen. A deposit is only ever taken on a bill at the till.
       </p>
     </section>
   );

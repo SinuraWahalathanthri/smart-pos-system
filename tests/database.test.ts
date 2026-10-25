@@ -144,6 +144,9 @@ describe("complete_sale", () => {
     );
     expect(ledger.map((l) => l.event).sort()).toEqual(["fee_charged", "sold"]);
     expect(Number(ledger.find((l) => l.event === "fee_charged")!.amount_cents)).toBe(10000);
+    // Legacy till: the deposit is priced from the bill's own fee line, never from the payload's claim.
+    const [legacy] = await q<{ bottle_fee_cents: string }>("select bottle_fee_cents from sales where id = $1", [payload.id]);
+    expect(Number(legacy.bottle_fee_cents)).toBe(10000);
 
     const items = await q("select 1 from sale_items where sale_id = $1", [payload.id]);
     expect(items.length).toBe(3);
@@ -156,7 +159,7 @@ describe("complete_sale", () => {
     lines = addLine(lines, { productId: ids["Curry Powder"], packSizeId: ids.curry250, name: "Curry Powder", label: "250 g", qty: 1, unitPrice: 43000, taxRate: 0 }).lines;
     lines = addLine(lines, { productId: ids["Fresh Milk (glass bottle)"], name: "Fresh Milk (glass bottle)", qty: 1, unitPrice: 25000, taxRate: 0, returnableBottle: true }).lines;
 
-    const { sale } = buildSale({ lines, bottlesReturned: 0, feeWaived: 0, discount: 1000 }, { id: nimal.id, name: "Nimal" }, { method: "cash", tendered: 100000 });
+    const { sale } = buildSale({ lines, discount: 1000 }, { id: nimal.id, name: "Nimal" }, { method: "cash", tendered: 100000 });
     const record: SaleRecord = { ...sale, receiptNo: 77, syncStatus: "pending" };
     const marieBefore = await stockOf("Marie Biscuit");
     const packsBefore = await packsOf();
@@ -164,14 +167,18 @@ describe("complete_sale", () => {
     const res = (await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(toSalePayload(record))]))) as { status: string };
     expect(res.status).toBe("created");
 
-    // 24,000 + 43,000 + 25,000 + 10,000 fee = 102,000 - 1,000 discount
+    // 24,000 + 43,000 + 25,000 = 92,000 - 1,000 discount. The milk bottle is a loan, not a fee.
     const [row] = await q(
       "select total_cents, discount_cents, local_receipt_no, cashier_id, bottle_fee_cents from sales where id = $1", [record.id]);
-    expect(row).toMatchObject({ total_cents: 101000, discount_cents: 1000, local_receipt_no: 77, cashier_id: nimal.id, bottle_fee_cents: 10000 });
+    expect(row).toMatchObject({ total_cents: 91000, discount_cents: 1000, local_receipt_no: 77, cashier_id: nimal.id, bottle_fee_cents: 0 });
     expect(await stockOf("Marie Biscuit")).toBe(marieBefore - 2); // 3 scanned, 1 voided
     expect(await packsOf()).toBe(packsBefore - 1);
     expect((await q("select 1 from sale_items where sale_id = $1 and status = 'voided' and void_reason = 'Double scan'", [record.id])).length).toBe(1);
-    expect((await q("select 1 from bottle_ledger where sale_id = $1 and event = 'fee_charged'", [record.id])).length).toBe(1);
+    // The bottle went out on loan: recorded as sold, with no money attached to it.
+    const [loan] = await q<{ event: string; amount_cents: string }>(
+      "select event, amount_cents from bottle_ledger where sale_id = $1", [record.id]);
+    expect(loan).toMatchObject({ event: "sold" });
+    expect(Number(loan.amount_cents)).toBe(0);
   });
 
   it("is idempotent: a retried sync neither duplicates nor takes stock twice", async () => {
@@ -211,7 +218,7 @@ describe("complete_sale", () => {
     expect((await q("select 1 from audit_logs where action = 'line_voided'")).length).toBeGreaterThan(0);
   });
 
-  it("sells a spice pack size and records a waived bottle fee", async () => {
+  it("sells a spice pack size and leaves the bottle as a loan", async () => {
     const before = await packsOf();
     const payload = salePayload({
       subtotal_cents: 68000, total_cents: 68000, tax_included_cents: 0, bottle_fee_cents: 0,
@@ -223,8 +230,10 @@ describe("complete_sale", () => {
     });
     await asUser(ids.cashier, () => rpc("complete_sale", [JSON.stringify(payload)]));
     expect(await packsOf()).toBe(before - 1);
-    expect((await q("select 1 from bottle_ledger where event = 'fee_waived'")).length).toBe(1);
-    expect((await q("select 1 from audit_logs where action = 'bottle_fee_waived'")).length).toBe(1);
+    // Nothing is charged and nothing is waived: the customer owes the bottle, not the money.
+    expect(await q("select 1 from bottle_ledger where sale_id = $1 and event in ('fee_charged', 'fee_waived')", [payload.id])).toEqual([]);
+    expect(await q("select 1 from audit_logs where entity_id = $1 and action = 'bottle_fee_waived'", [payload.id])).toEqual([]);
+    expect((await q("select 1 from bottle_ledger where sale_id = $1 and event = 'sold'", [payload.id])).length).toBe(1);
   });
 
   it("moves the alert from low to out of stock, and clears it on restock", async () => {

@@ -2,10 +2,10 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { addLine, computeBill, newId, voidQty, bottleCount } from "./bill";
+import { addLine, computeBill, newId, voidQty } from "./bill";
 import type { Cents } from "./money";
 import { isConnected } from "./supabase/client";
-import type { BillLine, BillSnapshot, HeldBill, PackSize, Product, SaleRecord, Staff } from "./types";
+import type { BillLine, BillSnapshot, BottleDeposit, HeldBill, PackSize, Product, SaleRecord, Staff } from "./types";
 
 export type SessionUser = Pick<Staff, "id" | "name" | "role" | "code">;
 
@@ -79,16 +79,20 @@ interface PosState extends BillSnapshot {
   setQty: (lineId: string, qty: number) => void;
   nudgeQty: (lineId: string, delta: number) => void;
   voidLine: (lineId: string, qty: number, reason: string, by: string) => void;
-  returnBottle: (delta: 1 | -1) => void;
-  waiveFee: () => void;
   setDiscount: (cents: Cents) => void;
   attachCustomer: (c: { id: string; name: string } | null) => void;
+  /** Refresh the count the bill shows after bottles are handed back at the counter. */
+  setCustomerBottles: (n: number) => void;
+  /** The customer keeps one more bottle and pays its deposit on this bill. */
+  addDeposit: (d: Omit<BottleDeposit, "qty">) => void;
+  /** Take one deposit back off the bill (nothing has been paid yet). */
+  removeDeposit: (productId: string) => void;
   clearBill: () => void;
   snapshot: () => BillSnapshot;
   loadBill: (held: HeldBill) => void;
 }
 
-const emptyBill = (): BillSnapshot => ({ lines: [], bottlesReturned: 0, feeWaived: 0, discount: 0 });
+const emptyBill = (): BillSnapshot & { deposits: BottleDeposit[] } => ({ lines: [], deposits: [], discount: 0 });
 let toastSeq = 0;
 
 export const usePos = create<PosState>()(
@@ -175,27 +179,8 @@ export const usePos = create<PosState>()(
           lines,
           selectedId: stillThere ? lineId : (active[active.length - 1]?.id ?? null),
         });
-        // Returned empties can't exceed the milk still on the bill.
-        const bottles = bottleCount(lines);
-        const s = get();
-        if (s.bottlesReturned > bottles) set({ bottlesReturned: bottles });
-        if (s.bottlesReturned + s.feeWaived > bottles) {
-          set({ feeWaived: Math.max(0, bottles - get().bottlesReturned) });
-        }
       },
 
-      returnBottle: (delta) => {
-        const s = get();
-        const bottles = bottleCount(s.lines);
-        const next = s.bottlesReturned + delta;
-        if (next < 0) return;
-        if (next > bottles) {
-          s.notify("No more milk bottles on this bill to cover", "warn");
-          return;
-        }
-        set({ bottlesReturned: next });
-      },
-      waiveFee: () => set({ feeWaived: get().feeWaived + 1 }),
       setDiscount: (cents) => set({ discount: Math.max(0, cents) }),
 
       // A new bill belongs to a new customer: carrying the last one over would silently credit
@@ -221,6 +206,9 @@ export const usePos = create<PosState>()(
       customerBottles: 0,
       setCustomerCard: (c) =>
         set({
+          // A deposit settles one person's loan. Switching the bill to someone else must drop it,
+          // or the next customer would pay for the previous one's bottle.
+          ...(c?.id !== get().customerId ? { deposits: [] } : {}),
           customerId: c?.id,
           customerName: c?.name,
           customerPoints: c?.points ?? 0,
@@ -229,16 +217,37 @@ export const usePos = create<PosState>()(
           customerBottles: c?.bottles_out ?? 0,
         }),
       attachCustomer: (c) =>
-        set({ customerId: c?.id, customerName: c?.name }),
+        set({
+          ...(c?.id !== get().customerId ? { deposits: [] } : {}),
+          customerId: c?.id,
+          customerName: c?.name,
+        }),
+      // A return registered at the counter changes the count the bill shows immediately; the next
+      // gate/customer lookup reads it from the database again anyway.
+      setCustomerBottles: (n) => set({ customerBottles: Math.max(0, Math.round(n)) }),
+      addDeposit: (d) => {
+        const deposits = get().deposits ?? [];
+        const existing = deposits.find((x) => x.productId === d.productId);
+        set({
+          deposits: existing
+            ? deposits.map((x) => (x.productId === d.productId ? { ...x, qty: x.qty + 1 } : x))
+            : [...deposits, { ...d, qty: 1 }],
+        });
+      },
+      removeDeposit: (productId) =>
+        set({
+          deposits: (get().deposits ?? [])
+            .map((x) => (x.productId === productId ? { ...x, qty: x.qty - 1 } : x))
+            .filter((x) => x.qty > 0),
+        }),
       snapshot: () => {
-        const { lines, bottlesReturned, feeWaived, discount, customerId, customerName } = get();
-        return { lines, bottlesReturned, feeWaived, discount, customerId, customerName };
+        const { lines, deposits, discount, customerId, customerName } = get();
+        return { lines, deposits, discount, customerId, customerName };
       },
       loadBill: (held) =>
         set({
           lines: held.lines,
-          bottlesReturned: held.bottlesReturned,
-          feeWaived: held.feeWaived,
+          deposits: held.deposits ?? [],
           discount: held.discount,
           customerId: held.customerId,
           customerName: held.customerName,
@@ -256,8 +265,7 @@ export const usePos = create<PosState>()(
       partialize: (s) => ({
         session: s.session,
         lines: s.lines,
-        bottlesReturned: s.bottlesReturned,
-        feeWaived: s.feeWaived,
+        deposits: s.deposits,
         discount: s.discount,
         // Who the bill is for must survive a refresh too, or points and bottles would silently
         // land on the wrong person (or on nobody) after a power cut.

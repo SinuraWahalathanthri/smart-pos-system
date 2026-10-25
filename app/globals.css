@@ -133,11 +133,88 @@ body {
   animation: pop-in 0.14s ease-out;
 }
 
+/* Mobile: the bill slides in from the right edge, the way a drawer is expected to move.
+   Tailwind cannot prefix a class declared in plain CSS, so `sm:slide-in-right` would compile to
+   nothing; the breakpoint switch is done here instead. */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.slide-in-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* A sheet rises from the bottom on a phone and comes in from the right from sm up. */
+.sheet-motion {
+  animation: slide-up-sm 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (min-width: 640px) {
+  .sheet-motion {
+    animation: slide-in-right 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@keyframes slide-up-sm {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-in-right-sm {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.slide-in-right-sm {
+  animation: slide-in-right-sm 0.18s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.18s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flash-in,
   .shake,
-  .pop-in {
+  .pop-in,
+  .slide-in-right,
+  .sheet-motion,
+  .slide-in-right-sm,
+  .fade-in {
     animation: none;
+  }
+}
+
+/* No keyboard on a touch device, so a keycap would point at a key that is not there. */
+@media (pointer: coarse) {
+  .keycap-hint {
+    display: none;
   }
 }
 
