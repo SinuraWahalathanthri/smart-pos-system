@@ -62,6 +62,16 @@ jobs:
 
       # The packaged app must prove it boots, not merely compile. macOS runners cannot open a
       # window without a signed helper, so the check runs where a headless display exists.
+      # Chromium's setuid sandbox helper must be root-owned with mode 4755, and npm installs it as
+      # the runner user, so Electron aborts ("SUID sandbox helper ... not configured correctly")
+      # before a window opens. Fix the helper rather than pass --no-sandbox: the check should boot
+      # the app the way users run it. Electron downloads its binary lazily, so fetch it first.
+      - name: Prepare the Electron sandbox (Linux)
+        if: matrix.target == 'linux'
+        run: |
+          node node_modules/electron/install.js
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       - name: Verify the build boots (Linux)
         if: matrix.target == 'linux'
         run: xvfb-run --auto-servernum npm run smoke:desktop
