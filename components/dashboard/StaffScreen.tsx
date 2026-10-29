@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Plus, UserX, KeyRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Plus, ScanLine, UserX, KeyRound } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button, Dialog } from "../ui/Dialog";
 import { DashboardShell, NotAllowed } from "./DashboardShell";
@@ -43,6 +43,7 @@ function StaffList() {
   const [message, setMessage] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [pinFor, setPinFor] = useState<StaffRow | null>(null);
+  const [badgeFor, setBadgeFor] = useState<StaffRow | null>(null);
 
   async function load() {
     setLoading(true);
@@ -105,6 +106,22 @@ function StaffList() {
         />
       )}
 
+      {badgeFor && (
+        <SetBadgeDialog
+          staff={badgeFor}
+          serverError={error}
+          onClose={() => setBadgeFor(null)}
+          onSubmit={async (badge) => {
+            const ok = await call(
+              "set_staff_badge",
+              { p_staff_id: badgeFor.id, p_badge: badge },
+              `${badgeFor.full_name}'s badge is set. It now approves at the till together with their PIN.`,
+            );
+            if (ok) setBadgeFor(null);
+          }}
+        />
+      )}
+
       {adding && (
         <AddStaffForm
           onCancel={() => setAdding(false)}
@@ -151,7 +168,18 @@ function StaffList() {
                   <td className="px-4 py-2 font-medium">{r.full_name}</td>
                   <td className="px-4 py-2 font-mono">{r.staff_code}</td>
                   <td className="px-4 py-2 capitalize">{r.role}</td>
-                  <td className="px-4 py-2 text-muted">{r.has_badge ? "Set" : "-"}</td>
+                  <td className="px-4 py-2">
+                    {/* A supervisor approves with badge + PIN together; without a badge they cannot approve at all. */}
+                    {r.has_badge ? (
+                      <span className="text-muted">Set</span>
+                    ) : r.role === "supervisor" ? (
+                      <span className="font-medium text-danger" title="Cannot approve voids or discounts until a badge is set">
+                        Not set
+                      </span>
+                    ) : (
+                      <span className="text-muted">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">
                     {/* No PIN means the till rejects every attempt, which reads as "wrong PIN". */}
                     {r.has_pin ? <span className="text-muted">Set</span> : <span className="font-medium text-danger">Not set</span>}
@@ -171,6 +199,16 @@ function StaffList() {
                       >
                         <KeyRound size={16} />
                       </button>
+                      {r.role !== "cashier" && (
+                        <button
+                          title={r.has_badge ? "Replace badge" : "Set badge"}
+                          disabled={busy}
+                          onClick={() => setBadgeFor(r)}
+                          className="rounded-lg p-2 text-muted hover:bg-surface-2"
+                        >
+                          <ScanLine size={16} />
+                        </button>
+                      )}
                       {r.role !== "owner" && (
                         <button
                           title={r.is_active ? "Deactivate" : "Reactivate"}
@@ -313,6 +351,104 @@ function SetPinDialog({
         )}
 
         <p className="text-xs text-muted">The PIN is hashed on the server and cannot be read back.</p>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Register the badge a supervisor scans to approve a void, discount or stock correction.
+ *
+ * The till asks for the badge AND the PIN together; a supervisor without a badge is refused with
+ * "badge_required", so before this dialog existed only the owner could approve anything. The badge
+ * is scanned twice: a misread scan stored as the badge would lock the supervisor out with no hint why.
+ */
+function SetBadgeDialog({
+  staff,
+  serverError,
+  onClose,
+  onSubmit,
+}: {
+  staff: StaffRow;
+  serverError: string | null;
+  onClose: () => void;
+  onSubmit: (badge: string) => void | Promise<void>;
+}) {
+  const [badge, setBadge] = useState("");
+  const [again, setAgain] = useState("");
+  const [saving, setSaving] = useState(false);
+  const secondRef = useRef<HTMLInputElement>(null);
+
+  const ready = badge.trim().length >= 3 && badge.trim() === again.trim();
+
+  async function submit() {
+    if (!ready) return;
+    setSaving(true);
+    await onSubmit(badge.trim());
+    setSaving(false);
+  }
+
+  return (
+    <Dialog
+      title={`${staff.has_badge ? "Replace" : "Set"} badge for ${staff.full_name}`}
+      onClose={onClose}
+      width="max-w-sm"
+      onKey={(e) => {
+        // A scanner ends with Enter: after the first scan, move to the second field instead of submitting.
+        if (e.key === "Enter" && (e.target as HTMLElement).dataset.badge === "first") {
+          e.preventDefault();
+          secondRef.current?.focus();
+          return true;
+        }
+      }}
+      onConfirm={() => void submit()}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={saving || !ready}>
+            {saving ? <Loader2 className="animate-spin" size={15} /> : <ScanLine size={15} />} Save badge
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-muted">
+          Scan {staff.full_name}&apos;s staff badge, then scan it again to confirm. You can also type the code printed
+          under the barcode.
+          {staff.has_badge && " The old badge stops working immediately."}
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Scan badge</span>
+          <input
+            className="field font-mono"
+            type="password"
+            autoComplete="off"
+            data-autofocus
+            data-badge="first"
+            value={badge}
+            onChange={(e) => setBadge(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Scan again</span>
+          <input
+            ref={secondRef}
+            className="field font-mono"
+            type="password"
+            autoComplete="off"
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+          />
+        </label>
+        {again.length > 0 && badge.trim() !== again.trim() && (
+          <p className="text-xs text-danger">The two scans do not match. Scan the same badge twice.</p>
+        )}
+        {serverError && (
+          <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{serverError}</p>
+        )}
+        <p className="text-xs text-muted">The badge is hashed on the server and cannot be read back.</p>
       </div>
     </Dialog>
   );

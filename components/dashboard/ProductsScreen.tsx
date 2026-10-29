@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, PackagePlus, Plus, Search, Trash2 } from "lucide-react";
+import { Archive, Loader2, PackagePlus, Plus, Search, Trash2 } from "lucide-react";
 import { formatMoney } from "@/lib/money";
 import { getSupabase } from "@/lib/supabase/client";
+import { Button, Dialog } from "../ui/Dialog";
 import { DashboardShell, NotAllowed } from "./DashboardShell";
 import { StockPanel } from "./StockPanel";
 import { permissions, useShop } from "./useShop";
@@ -39,7 +40,7 @@ export function ProductsScreen() {
 
   return (
     <DashboardShell>
-      {can.manageProducts ? <ProductList currency={ctx?.store?.currency ?? "LKR"} /> : <NotAllowed what="products" role={ctx?.role} />}
+      {can.manageProducts ? <ProductList currency={ctx?.store?.currency ?? "LKR"} canArchive={ctx?.role === "owner"} /> : <NotAllowed what="products" role={ctx?.role} />}
     </DashboardShell>
   );
 }
@@ -50,7 +51,7 @@ const COLORS = ["amber", "red", "green", "blue", "purple", "slate"];
 const digits = (v: string) => v.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1");
 const whole = (v: string) => v.replace(/[^0-9]/g, "");
 
-function ProductList({ currency }: { currency: string }) {
+function ProductList({ currency, canArchive }: { currency: string; canArchive: boolean }) {
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [query, setQuery] = useState("");
@@ -60,6 +61,7 @@ function ProductList({ currency }: { currency: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProductRow | "new" | null>(null);
   const [stockFor, setStockFor] = useState<ProductRow | null>(null);
+  const [archiving, setArchiving] = useState<ProductRow | null>(null);
   const [packTotal, setPackTotal] = useState<Map<string, number>>(new Map());
 
   const money = (c: number) => formatMoney(c);
@@ -188,6 +190,20 @@ function ProductList({ currency }: { currency: string }) {
         />
       )}
 
+      {archiving && (
+        <ArchiveDialog
+          product={archiving}
+          onClose={() => setArchiving(null)}
+          onDone={async () => {
+            setMessage(`${archiving.name} archived. It is gone from the till and this list; its sales stay in every report.`);
+            setArchiving(null);
+            if (editing !== "new" && editing?.id === archiving.id) setEditing(null);
+            if (stockFor?.id === archiving.id) setStockFor(null);
+            await load();
+          }}
+        />
+      )}
+
       {stockFor && (
         <StockPanel
           product={stockFor}
@@ -255,6 +271,16 @@ function ProductList({ currency }: { currency: string }) {
                       <button onClick={() => setEditing(r)} className="text-sm text-primary underline">
                         Edit
                       </button>
+                      {canArchive && (
+                        <button
+                          onClick={() => setArchiving(r)}
+                          title="Archive (owner only)"
+                          aria-label={`Archive ${r.name}`}
+                          className="rounded p-1 text-muted hover:bg-surface-2 hover:text-danger"
+                        >
+                          <Archive size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -295,6 +321,7 @@ function ProductForm({
     category: initial?.category_id ?? "",
     opening: "",
     weighted: initial?.sale_mode === "weighted",
+    active: initial?.is_active ?? true,
   });
   const [packs, setPacks] = useState<PackRow[]>([{ weightG: "250", price: "" }]);
   const [newCat, setNewCat] = useState("");
@@ -345,7 +372,7 @@ function ProductForm({
             color: form.color,
             category_id: form.category || null,
             sale_mode: form.weighted ? "weighted" : "unit",
-            is_active: initial?.is_active ?? true,
+            is_active: form.active,
           },
           packs,
         );
@@ -582,6 +609,24 @@ function ProductForm({
         </span>
       </label>
 
+      {initial && (
+        <label className="flex items-start gap-2 rounded-lg bg-surface-2 p-3">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.active}
+            onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
+          />
+          <span className="text-sm">
+            <span className="font-medium">Sell this at the till</span>
+            <span className="mt-0.5 block text-xs text-muted">
+              Untick to take it off the till for now (out of season, recalled). It stays in this list and can be
+              switched back on. To remove it for good, archive it instead.
+            </span>
+          </span>
+        </label>
+      )}
+
       <div className="flex gap-2">
         <button
           type="submit"
@@ -595,5 +640,74 @@ function ProductForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Archive a product: the owner's soft delete (archive_product()).
+ *
+ * Nothing is deleted - sales, stock movements and costs keep pointing at the row, so every report
+ * still adds up - but the product leaves the till and this list. A reason is required because the
+ * audit trail is the only place that will ever say why it went.
+ */
+function ArchiveDialog({
+  product,
+  onClose,
+  onDone,
+}: {
+  product: ProductRow;
+  onClose: () => void;
+  onDone: () => void | Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function go() {
+    if (!reason.trim()) return setError("Say why this product is being archived.");
+    setBusy(true);
+    setError(null);
+    const { error: err } = await getSupabase().rpc("archive_product", { p_product: product.id, p_reason: reason.trim() });
+    setBusy(false);
+    if (err) return setError(err.message);
+    await onDone();
+  }
+
+  return (
+    <Dialog
+      title={`Archive ${product.name}?`}
+      tone="danger"
+      onClose={onClose}
+      onConfirm={() => void go()}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>
+            Keep it
+          </Button>
+          <Button variant="danger" onClick={() => void go()} disabled={busy}>
+            {busy ? "Archiving..." : "Archive"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {error && <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+        <p className="text-sm text-muted">
+          It disappears from the till and from this list. Past sales, stock history and costs are kept, so reports do
+          not change. If you only want to stop selling it for a while, untick <b>Sell this at the till</b> in Edit
+          instead.
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Why?</span>
+          <input
+            className="field"
+            data-autofocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="No longer stocked"
+          />
+        </label>
+      </div>
+    </Dialog>
   );
 }
