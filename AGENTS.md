@@ -96,6 +96,18 @@ versa - unless it is internal (`bottles_owed`, `reverse_sale_bottles`) or retire
 **`stock_on_hand` is never written directly.** `guard_stock_columns` zeroes it on INSERT and raises on
 UPDATE. Opening stock goes through `stock_movements` with type `opening` - `save_product` does this
 from the `opening_stock` key. Any new screen that sets stock must do the same.
+**Suppliers, stock corrections and archiving (0028).** `save_supplier()` is the only write path for
+`suppliers` (guarded like `save_purchase`, owner or supervisor); suppliers are deactivated, never
+deleted. `adjust_stock()` lets an owner or supervisor correct stock directly, a cashier only with an
+approval token, and refuses to go below zero. Both it and `archive_product()` resolve the caller through
+`app_store_id()` - 0003's unscoped `auth_user_id = auth.uid()` lookup is wrong for multi-shop owners.
+A refund of a bill paid on credit is not offered in the UI: `refund_sale()` does not touch the credit
+ledger, so it would hand back cash for a debt still owed. Cancelling (`void_sale()`) removes the tab entry.
+
+**The mock backend (`npm run dev:mock`) serves plain table reads and set-returning RPCs.** Before that
+it returned only the first row of a `returns table` function and 404'd every table but `products`, so
+the shop switcher, receipts and stock history crashed under it while working on real Supabase.
+
 **Analytics hide cost, not just the button.** `product_analytics()` returns null `cost_cents` and
 `margin_cents` for a supervisor, so the number never reaches the browser.
 

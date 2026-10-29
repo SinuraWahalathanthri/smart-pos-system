@@ -243,6 +243,10 @@ describe("0025 platform admin", () => {
       [`select public.bottles_owed($1,$2)`, [nothing, nothing]],
       [`select public.reverse_sale_bottles($1,$2)`, [nothing, true]],
       [`select public.charge_bottle_fee($1,$2,$3)`, [nothing, nothing, 1]],
+      // 0028: suppliers, stock corrections and archiving.
+      [`select public.save_supplier($1)`, [{ name: "x" }]],
+      [`select public.adjust_stock($1,$2,$3,$4,$5)`, [nothing, null, 1, "r", null]],
+      [`select public.archive_product($1,$2)`, [nothing, "r"]],
     ];
 
     await db.exec(`set role anon`);

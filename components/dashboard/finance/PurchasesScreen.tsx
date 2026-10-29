@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Check, Download, Plus } from "lucide-react";
+import { Ban, Check, Download, Pencil, Plus } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { formatMoney, parseMoneyInput } from "@/lib/money";
 import {
@@ -21,7 +21,18 @@ import { Empty, ErrorNote, Loading, Money, PeriodLabel, Section, Table } from ".
 import { MonthPicker } from "./FinanceScreen";
 import { VoidDialog } from "./ExpensesScreen";
 
-type Supplier = { id: string; name: string };
+type Supplier = {
+  id: string;
+  name: string;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  vat_no: string | null;
+  payment_terms_days: number;
+  is_active: boolean;
+};
+
+const SUPPLIER_COLUMNS = "id, name, contact_name, phone, email, vat_no, payment_terms_days, is_active";
 
 /**
  * Supplier bills: what stock cost, and what is still owed for it.
@@ -49,13 +60,14 @@ function Purchases({ canWrite }: { canWrite: boolean }) {
   const [editing, setEditing] = useState<Purchase | "new" | null>(null);
   const [paying, setPaying] = useState<Purchase | null>(null);
   const [voiding, setVoiding] = useState<Purchase | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | "new" | null>(null);
 
   const load = useCallback(async (p: Period) => {
     setLoading(true);
     const sb = getSupabase();
     const [list, sup] = await Promise.all([
       sb.rpc("purchases_export", { p_from: p.from, p_to: p.to }),
-      sb.from("suppliers").select("id, name").order("name"),
+      sb.from("suppliers").select(SUPPLIER_COLUMNS).order("name"),
     ]);
     setLoading(false);
     if (list.error) return setError(list.error.message);
@@ -217,10 +229,76 @@ function Purchases({ canWrite }: { canWrite: boolean }) {
         )}
       </Section>
 
+      <Section
+        title="Suppliers"
+        actions={
+          canWrite && (
+            <Button onClick={() => setEditingSupplier("new")}>
+              <Plus size={16} /> Add supplier
+            </Button>
+          )
+        }
+      >
+        {loading ? (
+          <Loading what="suppliers" />
+        ) : suppliers.length === 0 ? (
+          <Empty>No suppliers yet. Add the people you buy stock from, then record their bills above.</Empty>
+        ) : (
+          <Table
+            head={
+              <tr>
+                <th className="py-2 pr-3 font-medium">Name</th>
+                <th className="py-2 pr-3 font-medium">Contact</th>
+                <th className="py-2 pr-3 font-medium">VAT no.</th>
+                <th className="py-2 pr-3 text-right font-medium">Terms</th>
+                <th className="py-2 text-right font-medium">Actions</th>
+              </tr>
+            }
+          >
+            {suppliers.map((s) => (
+              <tr key={s.id} className={s.is_active ? "" : "text-muted"}>
+                <td className="py-2 pr-3">
+                  {s.name}
+                  {!s.is_active && <span className="ml-1 text-xs">(inactive)</span>}
+                </td>
+                <td className="py-2 pr-3 text-muted">{[s.contact_name, s.phone, s.email].filter(Boolean).join(" · ") || "—"}</td>
+                <td className="py-2 pr-3 text-muted">{s.vat_no ?? "—"}</td>
+                <td className="py-2 pr-3 text-right text-muted">
+                  {s.payment_terms_days > 0 ? `${s.payment_terms_days} days` : "On delivery"}
+                </td>
+                <td className="py-2 text-right">
+                  {canWrite && (
+                    <button
+                      className="rounded p-1.5 text-muted hover:bg-surface-2"
+                      title="Edit supplier"
+                      onClick={() => setEditingSupplier(s)}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </Section>
+
+      {editingSupplier && (
+        <SupplierDialog
+          supplier={editingSupplier === "new" ? null : editingSupplier}
+          onClose={() => setEditingSupplier(null)}
+          onSaved={async () => {
+            setEditingSupplier(null);
+            await load(period);
+          }}
+        />
+      )}
+
       {editing && (
         <PurchaseDialog
           purchase={editing === "new" ? null : editing}
           suppliers={suppliers}
+          onSupplierAdded={() => void load(period)}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -273,15 +351,22 @@ function StatusChip({ status }: { status: PurchaseStatus }) {
 function PurchaseDialog({
   purchase,
   suppliers,
+  onSupplierAdded,
   onClose,
   onSaved,
 }: {
   purchase: Purchase | null;
   suppliers: Supplier[];
+  onSupplierAdded: () => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [supplierId, setSupplierId] = useState(purchase?.supplier_id ?? suppliers[0]?.id ?? "");
+  // Inactive suppliers are hidden from a new bill, but a bill already against one keeps showing it.
+  const [choices, setChoices] = useState(() =>
+    suppliers.filter((s) => s.is_active || s.id === purchase?.supplier_id).map((s) => ({ id: s.id, name: s.name })),
+  );
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [supplierId, setSupplierId] = useState(purchase?.supplier_id ?? choices[0]?.id ?? "");
   const [invoiceNo, setInvoiceNo] = useState(purchase?.supplier_invoice_no ?? "");
   const [receivedOn, setReceivedOn] = useState(purchase?.received_on ?? new Date().toISOString().slice(0, 10));
   const [subtotal, setSubtotal] = useState(purchase ? String(purchase.subtotal_cents / 100) : "");
@@ -304,7 +389,7 @@ function PurchaseDialog({
     if (vatCents < 0 || extraCents < 0) return setError("Enter the tax and other costs, or leave them blank.");
     const paidCents = paidNow.trim() === "" ? 0 : (parseMoneyInput(paidNow) ?? -1);
     if (paidCents < 0) return setError("Enter what was paid, or leave it blank.");
-    if (!supplierId) return setError("Choose a supplier. Add one under Products if the list is empty.");
+    if (!supplierId) return setError("Choose a supplier, or add one with New.");
 
     setBusy(true);
     const { error: err } = await getSupabase().rpc("save_purchase", {
@@ -329,6 +414,7 @@ function PurchaseDialog({
   }
 
   return (
+    <>
     <Dialog
       title={purchase ? "Edit supplier bill" : "Record a supplier bill"}
       onClose={onClose}
@@ -355,14 +441,19 @@ function PurchaseDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Supplier</span>
-            <select className="field" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-              {suppliers.length === 0 && <option value="">No suppliers yet</option>}
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select className="field" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                {choices.length === 0 && <option value="">No suppliers yet</option>}
+                {choices.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <Button onClick={() => setAddingSupplier(true)} title="Add a supplier">
+                <Plus size={15} /> New
+              </Button>
+            </div>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Their invoice number</span>
@@ -436,6 +527,125 @@ function PurchaseDialog({
           Freight and duty are added to the cost of the goods rather than treated as an expense, which is why
           they are here and not in the expense book.
         </p>
+      </div>
+    </Dialog>
+    {addingSupplier && (
+      <SupplierDialog
+        supplier={null}
+        onClose={() => setAddingSupplier(false)}
+        onSaved={(saved) => {
+          setAddingSupplier(false);
+          setChoices((c) => [...c, saved].sort((x, y) => x.name.localeCompare(y.name)));
+          setSupplierId(saved.id);
+          onSupplierAdded();
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+/**
+ * Add or edit a supplier. A supplier is never deleted - bills point at it - so one the shop stopped
+ * buying from is marked inactive, which hides it from new bills only.
+ */
+function SupplierDialog({
+  supplier,
+  onClose,
+  onSaved,
+}: {
+  supplier: Supplier | null;
+  onClose: () => void;
+  onSaved: (saved: { id: string; name: string }) => void;
+}) {
+  const [name, setName] = useState(supplier?.name ?? "");
+  const [contact, setContact] = useState(supplier?.contact_name ?? "");
+  const [phone, setPhone] = useState(supplier?.phone ?? "");
+  const [email, setEmail] = useState(supplier?.email ?? "");
+  const [vatNo, setVatNo] = useState(supplier?.vat_no ?? "");
+  const [terms, setTerms] = useState(supplier?.payment_terms_days ? String(supplier.payment_terms_days) : "");
+  const [active, setActive] = useState(supplier?.is_active ?? true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!name.trim()) return setError("Give the supplier a name.");
+    if (terms.trim() !== "" && !/^\d+$/.test(terms.trim())) return setError("Payment terms are a whole number of days.");
+    setBusy(true);
+    const { data, error: err } = await getSupabase().rpc("save_supplier", {
+      p_supplier: {
+        ...(supplier ? { id: supplier.id } : {}),
+        name: name.trim(),
+        contact_name: contact.trim() || null,
+        phone: phone.trim() || null,
+        email: email.trim() || null,
+        vat_no: vatNo.trim() || null,
+        payment_terms_days: terms.trim() === "" ? 0 : Number(terms),
+        is_active: active,
+      },
+    });
+    setBusy(false);
+    if (err) return setError(err.message);
+    onSaved(data as { id: string; name: string });
+  }
+
+  const label = "mb-1 block text-xs font-medium uppercase tracking-wide text-muted";
+  return (
+    <Dialog
+      title={supplier ? "Edit supplier" : "Add a supplier"}
+      onClose={onClose}
+      onConfirm={() => void save()}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void save()} disabled={busy}>
+            {busy ? "Saving..." : "Save supplier"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {error && <ErrorNote message={error} />}
+        <label className="block">
+          <span className={label}>Name</span>
+          <input className="field" data-autofocus value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className={label}>Contact person</span>
+            <input className="field" value={contact} onChange={(e) => setContact(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className={label}>Phone</span>
+            <input className="field" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" />
+          </label>
+          <label className="block">
+            <span className={label}>Email</span>
+            <input className="field" value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" />
+          </label>
+          <label className="block">
+            <span className={label}>VAT number</span>
+            <input className="field" value={vatNo} onChange={(e) => setVatNo(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className={label}>Pays within (days)</span>
+            <input
+              className="field"
+              value={terms}
+              onChange={(e) => setTerms(e.target.value)}
+              inputMode="numeric"
+              placeholder="0 = on delivery"
+            />
+          </label>
+        </div>
+        {supplier && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            Still buying from this supplier (untick to hide them from new bills)
+          </label>
+        )}
       </div>
     </Dialog>
   );

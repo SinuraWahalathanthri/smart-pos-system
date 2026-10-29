@@ -101,7 +101,8 @@ const CATALOGUE_SQL = `
 
 async function callRpc(sub, fn, args) {
   const { rows: sig } = await db.query(
-    `select p.proargnames as names, array(select format_type(t, null) from unnest(p.proargtypes::oid[]) t) as types
+    `select p.proargnames as names, p.proretset as is_set,
+            array(select format_type(t, null) from unnest(p.proargtypes::oid[]) t) as types
        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = $1 and has_function_privilege('authenticated', p.oid, 'execute')
       order by cardinality(p.proargtypes) desc limit 1`,
@@ -116,14 +117,72 @@ async function callRpc(sub, fn, args) {
     const v = args[k];
     return v === null || v === undefined ? null : t === "jsonb" || t === "json" ? JSON.stringify(v) : String(v);
   });
-  const call = `select public.${fn}(${given.map((k, i) => `${k} => $${i + 1}::${types[names.indexOf(k)]}`).join(", ")}) as r`;
+  const argList = given.map((k, i) => `${k} => $${i + 1}::${types[names.indexOf(k)]}`).join(", ");
+  // PostgREST returns a set-returning function (`returns table` / `setof`) as an array of rows, not
+  // its first value; the dashboard's lists (shops, receipts, stock history) depend on that.
+  const isSet = sig[0].is_set;
+  const call = isSet ? `select * from public.${fn}(${argList})` : `select public.${fn}(${argList}) as r`;
   try {
     const { rows } = await asUser(sub, () => db.query(call, params));
-    return { status: 200, body: rows[0]?.r ?? null };
+    return { status: 200, body: isSet ? rows : (rows[0]?.r ?? null) };
   } catch (e) {
     const code = e.code ?? "P0001";
     const status = code === "28000" ? 401 : code === "42501" ? 403 : 400;
     return { status, body: { code, message: e.message, details: null, hint: null } };
+  }
+}
+
+/**
+ * Plain table reads (`sb.from(t).select("a, b").eq(...).order(...)`), run as the caller so RLS applies.
+ * Only flat column lists and the filters the dashboard uses: eq, neq, is, in, plus order and limit.
+ */
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+async function readTable(sub, table, params, select) {
+  if (!IDENT.test(table)) return { status: 404, body: { message: `mock: bad table ${table}` } };
+  const cols = select === "*" ? ["*"] : select.split(",").map((c) => c.trim()).filter(Boolean);
+  if (cols.some((c) => c !== "*" && !IDENT.test(c))) {
+    return { status: 400, body: { message: `mock: only flat selects are supported (${select})` } };
+  }
+  const where = [];
+  const args = [];
+  let order = "";
+  let limit = "";
+  for (const [key, raw] of params) {
+    if (key === "select") continue;
+    if (key === "order") {
+      const parts = raw.split(",").map((o) => o.split("."));
+      if (parts.some(([c]) => !IDENT.test(c))) return { status: 400, body: { message: "mock: bad order" } };
+      order = ` order by ${parts.map(([c, dir]) => `"${c}" ${dir === "desc" ? "desc" : "asc"}`).join(", ")}`;
+      continue;
+    }
+    if (key === "limit") {
+      limit = ` limit ${Number(raw) || 0}`;
+      continue;
+    }
+    if (!IDENT.test(key)) return { status: 400, body: { message: `mock: bad filter ${key}` } };
+    const dot = raw.indexOf(".");
+    const op = raw.slice(0, dot);
+    const val = raw.slice(dot + 1);
+    if (op === "is") {
+      if (!["null", "true", "false"].includes(val)) return { status: 400, body: { message: "mock: bad is" } };
+      where.push(`"${key}" is ${val}`);
+    } else if (op === "eq" || op === "neq") {
+      args.push(val);
+      where.push(`"${key}"::text ${op === "eq" ? "=" : "<>"} $${args.length}`);
+    } else if (op === "in") {
+      args.push(val.replace(/^\(|\)$/g, "").split(",").map((v) => v.replace(/^"|"$/g, "")));
+      where.push(`"${key}"::text = any($${args.length}::text[])`);
+    } else {
+      return { status: 400, body: { message: `mock: unsupported filter ${op}` } };
+    }
+  }
+  const list = cols.map((c) => (c === "*" ? "*" : `"${c}"`)).join(", ");
+  const sql = `select ${list} from public."${table}"${where.length ? ` where ${where.join(" and ")}` : ""}${order}${limit}`;
+  try {
+    const { rows } = await asUser(sub, () => db.query(sql, args));
+    return { status: 200, body: rows };
+  } catch (e) {
+    return { status: e.code === "42P01" ? 404 : 400, body: { code: e.code, message: e.message } };
   }
 }
 
@@ -189,11 +248,22 @@ createServer(async (req, res) => {
         const out = await callRpc(sub, url.pathname.slice("/rest/v1/rpc/".length), await readBody(req));
         return send(res, out.status, out.body);
       }
-      if (url.pathname === "/rest/v1/products" && req.method === "GET") {
+      const select = url.searchParams.get("select") ?? "*";
+      if (url.pathname === "/rest/v1/products" && req.method === "GET" && select.includes("(")) {
         const from = Number((req.headers.range ?? "0-").split("-")[0]) || 0;
         if (from > 0) return send(res, 200, []);
         const { rows } = await asUser(sub, () => db.query(CATALOGUE_SQL));
         return send(res, 200, rows[0].rows);
+      }
+      if (req.method === "GET") {
+        const out = await readTable(sub, url.pathname.slice("/rest/v1/".length), url.searchParams, select);
+        if (out.status !== 200) return send(res, out.status, out.body);
+        // .single() / .maybeSingle() ask for one object rather than an array.
+        if (String(req.headers.accept ?? "").includes("vnd.pgrst.object")) {
+          if (out.body.length > 1) return send(res, 406, { code: "PGRST116", message: "more than one row" });
+          return send(res, out.body.length ? 200 : 406, out.body[0] ?? { code: "PGRST116", message: "no rows" });
+        }
+        return send(res, 200, out.body);
       }
     }
     send(res, 404, { message: `mock: no route for ${req.method} ${url.pathname}` });
