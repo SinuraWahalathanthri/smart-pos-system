@@ -1,5 +1,5 @@
-import { OnboardingForm } from "@/components/dashboard/OnboardingForm";
-export const metadata = { title: "Set up your shop" };
+import { ApplicationGate } from "@/components/register/ApplicationGate";
+export const metadata = { title: "Set up your business" };
 export default function OnboardingPage() {
-  return <OnboardingForm email="" />;
+  return <ApplicationGate />;
 }

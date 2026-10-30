@@ -13,8 +13,10 @@
  *   NEXT_PUBLIC_SUPABASE_ANON_KEY=mock-anon-key
  *
  * Till account to sign in with:  till@shop.test / till-password
+ * Platform admin:  admin@platform.test / admin-password
  * Test switches:  POST /__mock/offline?on=1|0  (drop connections)  ·  GET /__mock/query?q=select...  (read-only)
- * NOT for production: it has no real authentication, only a fixed list of demo accounts.
+ *                 POST /__mock/confirm?email=...  (click the verification link of a self-registered account)
+ * NOT for production: it has no real authentication, only demo accounts and whatever /register creates.
  */
 import { createServer } from "node:http";
 import { readdirSync, readFileSync } from "node:fs";
@@ -29,6 +31,7 @@ const PORT = Number(process.env.PORT ?? 54321);
 const ACCOUNTS = {
   "till@shop.test": { password: "till-password", staffCode: "3" }, // a cashier till
   "owner@shop.test": { password: "owner-password", staffCode: "1" },
+  "admin@platform.test": { password: "admin-password", platformAdmin: true },
 };
 
 const db = new PGlite({ extensions: { pgcrypto } });
@@ -36,7 +39,8 @@ await db.exec(`
   create schema extensions;
   create role anon nologin; create role authenticated nologin; create role service_role nologin;
   create schema auth;
-  create table auth.users (id uuid primary key default gen_random_uuid(), email text unique);
+  create table auth.users (id uuid primary key default gen_random_uuid(), email text unique,
+                           email_confirmed_at timestamptz);
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth, extensions to anon, authenticated;
@@ -47,10 +51,20 @@ for (const f of readdirSync(join(ROOT, "migrations")).filter((x) => x.endsWith("
 await db.exec(readFileSync(join(ROOT, "seed.sql"), "utf8"));
 const users = {};
 for (const [email, a] of Object.entries(ACCOUNTS)) {
-  const { rows } = await db.query("insert into auth.users (email) values ($1) returning id", [email]);
+  const { rows } = await db.query(
+    "insert into auth.users (email, email_confirmed_at) values ($1, now()) returning id",
+    [email],
+  );
   users[email] = rows[0].id;
-  await db.query("update profiles set auth_user_id = $1 where staff_code = $2", [rows[0].id, a.staffCode]);
+  if (a.platformAdmin) {
+    await db.query("insert into platform_admins (auth_user_id, full_name) values ($1, 'Mock Admin')", [rows[0].id]);
+  } else {
+    await db.query("update profiles set auth_user_id = $1 where staff_code = $2", [rows[0].id, a.staffCode]);
+  }
 }
+const confirmed = async (email) =>
+  (await serial(() => db.query("select 1 from auth.users where email = $1 and email_confirmed_at is not null", [email])))
+    .rows.length > 0;
 
 // one connection, so run requests one at a time
 let queue = Promise.resolve();
@@ -74,7 +88,7 @@ function session(email) {
   const token = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub, role: "authenticated", aud: "authenticated", email, iat: now, exp: now + 3600 })}.mock`;
   return {
     access_token: token, token_type: "bearer", expires_in: 3600, expires_at: now + 3600, refresh_token: `rt|${email}`,
-    user: { id: sub, aud: "authenticated", role: "authenticated", email, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() },
+    user: { id: sub, aud: "authenticated", role: "authenticated", email, app_metadata: {}, user_metadata: ACCOUNTS[email]?.meta ?? {}, created_at: new Date().toISOString() },
   };
 }
 const subOf = (req) => {
@@ -232,7 +246,38 @@ createServer(async (req, res) => {
       if (!a || a.password !== body.password) {
         return send(res, 400, { error: "invalid_grant", error_description: "Invalid login credentials", code: 400, msg: "Invalid login credentials" });
       }
+      // GoTrue refuses a password sign-in until the verification link has been clicked.
+      if (!(await confirmed(body.email))) {
+        return send(res, 400, { error: "invalid_grant", error_description: "Email not confirmed", code: "email_not_confirmed", msg: "Email not confirmed" });
+      }
       return send(res, 200, session(body.email));
+    }
+    // Self-registration (/register). Like a real project with "Confirm email" on: the account exists but
+    // has no session until the address is confirmed - here with POST /__mock/confirm?email=...
+    if (url.pathname === "/auth/v1/signup") {
+      const body = await readBody(req);
+      const email = String(body.email ?? "").trim().toLowerCase();
+      if (!email || String(body.password ?? "").length < 8) {
+        return send(res, 422, { code: "weak_password", msg: "Password should be at least 8 characters." });
+      }
+      if (ACCOUNTS[email]) return send(res, 422, { code: "user_already_exists", msg: "User already registered" });
+      const { rows } = await serial(() => db.query("insert into auth.users (email) values ($1) returning id", [email]));
+      ACCOUNTS[email] = { password: body.password, meta: body.data ?? {} };
+      users[email] = rows[0].id;
+      console.log(`[mock] ${email} registered - confirm with: curl -X POST "http://127.0.0.1:${PORT}/__mock/confirm?email=${email}"`);
+      return send(res, 200, {
+        id: rows[0].id, aud: "authenticated", role: "authenticated", email, email_confirmed_at: null,
+        app_metadata: { provider: "email" }, user_metadata: body.data ?? {}, identities: [{ id: rows[0].id }],
+        created_at: new Date().toISOString(),
+      });
+    }
+    if (url.pathname === "/auth/v1/resend") return send(res, 200, {});
+    if (url.pathname === "/__mock/confirm") {
+      const email = (url.searchParams.get("email") ?? "").toLowerCase();
+      const { rows } = await serial(() =>
+        db.query("update auth.users set email_confirmed_at = now() where email = $1 returning id", [email]),
+      );
+      return rows.length ? send(res, 200, { confirmed: email }) : send(res, 404, { message: "no such account" });
     }
     if (url.pathname === "/auth/v1/logout") return send(res, 204);
     if (url.pathname === "/auth/v1/user") {

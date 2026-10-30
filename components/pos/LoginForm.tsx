@@ -7,6 +7,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { signInStaff } from "@/lib/data/access";
 import { ensureSeeded, getDb } from "@/lib/data/db";
 import { SHOP_NAME } from "@/lib/config";
+import { isDesktopApp } from "@/lib/registration";
 import { playCue } from "@/lib/sound";
 import { usePos } from "@/lib/store";
 import { getSupabase, isConnected } from "@/lib/supabase/client";
@@ -80,6 +81,15 @@ export function LoginForm() {
           />
         )}
 
+        {device === "needed" && !isDesktopApp() && (
+          <p className="mt-4 text-center text-sm text-muted">
+            New business?{" "}
+            <Link href="/register" className="font-semibold text-primary underline-offset-2 hover:underline">
+              Register your business
+            </Link>
+          </p>
+        )}
+
         {!isConnected() && (
           <div className="mt-4 rounded-xl border border-dashed border-border p-3 text-xs text-muted">
             <p className="mb-1 font-semibold text-text">Demo mode: not connected to Supabase</p>
@@ -118,9 +128,22 @@ function DeviceForm({ onDone }: { onDone: () => void }) {
     try {
       const { error: err } = await getSupabase().auth.signInWithPassword({ email: email.trim(), password });
       if (err) {
-        setError(/fetch|network/i.test(err.message) ? "No connection to the server. Check the internet and try again." : err.message);
+        setError(
+          /fetch|network/i.test(err.message)
+            ? "No connection to the server. Check the internet and try again."
+            : /not confirmed/i.test(err.message)
+              ? "Confirm your email first: open the link we sent when you registered."
+              : err.message,
+        );
         shake();
         playCue("error");
+        return;
+      }
+      // An account with no shop (a new registrant, or a platform admin) has no staff to sign in, so
+      // the PIN step would be a dead end. The entry route sends it to /onboarding or /platform.
+      const { data: shop } = await getSupabase().rpc("my_shop");
+      if (shop && !(shop as { onboarded?: boolean }).onboarded) {
+        window.location.replace("/");
         return;
       }
       onDone();

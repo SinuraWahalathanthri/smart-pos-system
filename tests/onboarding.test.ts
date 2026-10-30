@@ -49,8 +49,22 @@ async function asUser<T>(authId: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-const newAccount = async () =>
-  (await rows<{ id: string }>(`insert into auth.users default values returning id`))[0].id;
+/**
+ * A new account. Since 0029 a new shop needs an approved vendor application, so by default the
+ * account gets one (written directly, standing in for the platform admin's approval).
+ */
+const newAccount = async ({ approved = true } = {}) => {
+  const id = (await rows<{ id: string }>(`insert into auth.users default values returning id`))[0].id;
+  if (approved) {
+    await db.query(
+      `insert into vendor_applications
+         (auth_user_id, status, owner_name, legal_name, business_type, country, terms_version, terms_accepted_at)
+       values ($1, 'approved', 'Test Owner', 'Test Business', 'grocery', 'Sri Lanka', '2026-10', now())`,
+      [id],
+    );
+  }
+  return id;
+};
 
 const createStore = (auth: string, args: unknown[]) =>
   asUser(auth, async () => {
@@ -144,6 +158,24 @@ describe("onboarding a new shop", () => {
     await expect(
       createStore(auth, ["Bad Fee", null, null, null, "LKR", true, -1, 5]),
     ).rejects.toThrow(/bottle fee cannot be negative/i);
+  });
+
+  it("refuses a new shop to an account without an approved application (0029)", async () => {
+    const auth = await newAccount({ approved: false });
+    await expect(createStore(auth, ["Unreviewed Shop", null, null, null])).rejects.toThrow(/wait for approval/i);
+    expect(await rows(`select 1 from stores where name = 'Unreviewed Shop'`)).toEqual([]);
+  });
+
+  it("links the approved application to the shop and copies its business type", async () => {
+    const auth = await newAccount();
+    const out = await createStore(auth, ["Typed Shop", null, null, null]);
+    const store = await rows<{ business_type: string; country: string }>(
+      `select business_type, country from stores where id = $1`,
+      [out.id],
+    );
+    expect(store[0]).toEqual({ business_type: "grocery", country: "Sri Lanka" });
+    const app = await rows<{ store_id: string }>(`select store_id from vendor_applications where auth_user_id = $1`, [auth]);
+    expect(app[0].store_id).toBe(out.id);
   });
 
   it("refuses onboarding with no signed-in account", async () => {
