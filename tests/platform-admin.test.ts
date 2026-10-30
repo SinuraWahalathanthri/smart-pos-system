@@ -247,6 +247,16 @@ describe("0025 platform admin", () => {
       [`select public.save_supplier($1)`, [{ name: "x" }]],
       [`select public.adjust_stock($1,$2,$3,$4,$5)`, [nothing, null, 1, "r", null]],
       [`select public.archive_product($1,$2)`, [nothing, "r"]],
+      // 0029: vendor registration.
+      [`select public.submit_vendor_application($1)`, [{ legal_name: "x" }]],
+      [`select public.my_vendor_application()`, []],
+      [`select public.withdraw_vendor_application()`, []],
+      [`select public.platform_vendor_applications(null)`, []],
+      [`select public.platform_review_vendor_application($1,'approve',null)`, [nothing]],
+      [`select public.platform_registration_settings()`, []],
+      [`select public.platform_set_auto_approve(true)`, []],
+      [`select public.verified_email()`, []],
+      [`select public.caller_has_shop()`, []],
     ];
 
     await db.exec(`set role anon`);

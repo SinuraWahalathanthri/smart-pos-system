@@ -7,6 +7,7 @@ offline selling, and a Supabase backend.
 - **[PLAN.md](PLAN.md)** — what the system does and the build phases
 - **[DESIGN.md](DESIGN.md)** — look, layout and interaction rules
 - **[OPERATIONS.md](OPERATIONS.md)** — the manual for shop staff: shifts, emergencies, month-end
+- **[ROADMAP.md](ROADMAP.md)** — what comes next: vendor self-registration and the features for any kind of business
 - **[LICENSE](LICENSE)** — AGPL-3.0-or-later: free to use and modify, modifications shared back
 
 ## Licence
@@ -167,6 +168,30 @@ Data resets each run. It is a development tool, not a real server.
    The owner can correct their own shop details (name, address, VAT number, bottle deposit, discount
    cap, tax-inclusive pricing) from the pencil beside the shop name.
 7. To run a second till, add another user in Authentication and give them a staff row from the dashboard.
+
+#### Letting businesses register themselves (migration `0029`)
+
+Besides the admin creating owners (step 4), a business can sign itself up from the website: the public
+landing page at `/` links to `/register`, the owner confirms their email, fills in the business details
+on `/onboarding`, and a platform administrator approves it on the **Applications** tab of `/platform`.
+Once approved, the owner opens their shop from `/onboarding`. A new shop cannot be opened without an
+approved application. To switch it on in Supabase:
+
+1. Run `supabase/migrations/0029_vendor_registration.sql`.
+2. **Authentication → Providers → Email:** enable sign-ups and keep **Confirm email** on. Applications
+   are refused until the email is confirmed.
+3. **Authentication → URL Configuration:** set the Site URL to the website, and add
+   `https://<your-site>/onboarding` to the redirect URLs (the confirmation link lands there).
+4. Optional: **Authentication → Attack Protection** → enable CAPTCHA with Cloudflare Turnstile, and
+   put the matching site key in `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (see `.env.example`).
+5. Replace the **draft** text on `/terms` and `/privacy` with reviewed terms before opening to the
+   public, and bump `platform_settings.terms_version` when they change so applicants accept the new
+   version.
+
+**Approve new applications automatically** on the Applications tab skips the review (off by default).
+The mock (`npm run dev:mock`) supports the whole flow: sign in as `admin@platform.test` /
+`admin-password`, and confirm a registered email with
+`curl -X POST "http://127.0.0.1:54321/__mock/confirm?email=..."`.
 
 #### What the platform administrator can and cannot do
 

@@ -27,8 +27,10 @@ import {
   type PlatformStore,
   type PlatformStoreDetail,
 } from "@/lib/platform";
+import { listApplications } from "@/lib/registration";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button, Dialog } from "../ui/Dialog";
+import { ApplicationsPanel } from "./ApplicationsPanel";
 
 /**
  * The platform administrator's screen.
@@ -50,6 +52,16 @@ export function PlatformScreen() {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [openStore, setOpenStore] = useState<string | null>(null);
+  const [view, setView] = useState<"shops" | "applications">("shops");
+  const [pending, setPending] = useState<number | null>(null);
+
+  // The tab badge needs the count before the Applications tab is ever opened. A database that has
+  // not run 0029 yet simply shows no badge.
+  useEffect(() => {
+    listApplications("open")
+      .then((list) => setPending(list.length))
+      .catch(() => setPending(null));
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -102,7 +114,7 @@ export function PlatformScreen() {
           </span>
           <div className="mr-auto">
             <h1 className="text-base font-semibold leading-tight">Platform administration</h1>
-            <p className="text-xs text-muted">View shops and create owner accounts. Trading data is read-only.</p>
+            <p className="text-xs text-muted">Review new businesses, view shops and create owner accounts. Trading data is read-only.</p>
           </div>
           <Button variant="secondary" onClick={() => void load()}>
             <RefreshCw size={15} className="mr-1.5" /> Refresh
@@ -117,6 +129,34 @@ export function PlatformScreen() {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-5">
+        <div className="mb-4 flex gap-1 border-b border-border" role="tablist">
+          {(
+            [
+              ["shops", "Shops", null],
+              ["applications", "Applications", pending],
+            ] as const
+          ).map(([id, label, count]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={view === id}
+              onClick={() => setView(id)}
+              className={`-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${
+                view === id ? "border-primary text-text" : "border-transparent text-muted hover:text-text"
+              }`}
+            >
+              {label}
+              {count ? (
+                <span className="rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-fg">{count}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {view === "applications" ? (
+          <ApplicationsPanel onPendingCount={setPending} />
+        ) : (
+        <>
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           <Stat label="Shops" value={totals.shops} />
           <Stat label="Open" value={totals.active} />
@@ -204,6 +244,8 @@ export function PlatformScreen() {
               </tbody>
             </table>
           </div>
+        )}
+        </>
         )}
       </div>
 

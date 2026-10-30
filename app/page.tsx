@@ -1,14 +1,16 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Landing } from "@/components/register/Landing";
+import { isDesktopApp } from "@/lib/registration";
 import { getSupabase, isConnected } from "@/lib/supabase/client";
 /**
  * Entry point. Decides where a person lands, once, in one place.
  *
  *   not configured   -> /setup        (paste the project URL and anon key)
- *   no session       -> /login
+ *   no session       -> the public landing page on the website, /login in the desktop till
  *   password handed over but unchanged -> /account?first=1
- *   no shop yet      -> /platform     (a platform administrator) or /onboarding (a new owner)
+ *   no shop yet      -> /platform     (a platform administrator) or /onboarding (a new owner or applicant)
  *   a shop exists    -> /dashboard    (the till is one click away from there)
  *
  * The server answers these through my_shop(), so this decides from the database rather than from
@@ -16,6 +18,7 @@ import { getSupabase, isConnected } from "@/lib/supabase/client";
  */
 export default function Home() {
   const router = useRouter();
+  const [landing, setLanding] = useState(false);
   useEffect(() => {
     void (async () => {
       if (!isConnected()) {
@@ -26,7 +29,9 @@ export default function Home() {
         const sb = getSupabase();
         const { data } = await sb.auth.getSession();
         if (!data.session) {
-          router.replace("/login");
+          // The installed till has no visitors to greet: it signs in as a device account.
+          if (isDesktopApp()) router.replace("/login");
+          else setLanding(true);
           return;
         }
         const { data: shop } = await sb.rpc("my_shop");
@@ -47,6 +52,7 @@ export default function Home() {
       }
     })();
   }, [router]);
+  if (landing) return <Landing />;
   return (
     <main className="grid min-h-dvh place-items-center text-muted">
       <p>Starting...</p>

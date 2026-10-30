@@ -104,6 +104,24 @@ approval token, and refuses to go below zero. Both it and `archive_product()` re
 A refund of a bill paid on credit is not offered in the UI: `refund_sale()` does not touch the credit
 ledger, so it would hand back cash for a debt still owed. Cancelling (`void_sale()`) removes the tab entry.
 
+**Vendor registration (0029, `lib/registration.ts`, `components/register/`).** A business signs up
+with Supabase `signUp()`, confirms its email, then submits an application from `/onboarding`; a
+platform admin decides it on the Applications tab of `/platform`. `create_store()` now opens a NEW shop
+only for an account with an approved application (an account that already has a shop still gets it
+back), so a public sign-up cannot skip the review. Do not loosen that gate. Rules:
+- Nothing in registration is callable by `anon`; the account exists before any RPC runs. Every new
+  function is in the anon list in `tests/platform-admin.test.ts` and `tests/vendor-registration.test.ts`.
+- Registration only ever makes a shop owner, never a platform admin, and refuses a platform admin.
+- `vendor_applications` and `platform_settings` have RLS on and no client grants: read them only through
+  the functions. `verified_email()`, `caller_has_shop()` and `is_disposable_email()` are internal.
+- Approval does not create the shop; the owner's `create_store()` does, so there is one path for every
+  new shop. Tests that need a shop insert an approved application first (`tests/onboarding.test.ts`).
+- `/login` sends an account with no shop to `/` (then `/onboarding` or `/platform`): such an account
+  has no staff, so the PIN step was a dead end. The landing page is website-only: `isDesktopApp()`
+  sends the installed till straight to `/login`.
+- The decision is shown in the app only; there is no email service yet. `/terms` and `/privacy` are
+  drafts. Bump `platform_settings.terms_version` with the text, or applicants keep accepting the old one.
+
 **The mock backend (`npm run dev:mock`) serves plain table reads and set-returning RPCs.** Before that
 it returned only the first row of a `returns table` function and 404'd every table but `products`, so
 the shop switcher, receipts and stock history crashed under it while working on real Supabase.

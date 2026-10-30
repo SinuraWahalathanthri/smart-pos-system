@@ -15,17 +15,26 @@ import { getSupabase } from "@/lib/supabase/client";
  * The shop is created empty. There is no sample catalogue - a real shop must never open to
  * somebody else's demo data.
  */
-export function OnboardingForm({ email }: { email: string }) {
+export function OnboardingForm({
+  email,
+  initial,
+  approved = false,
+}: {
+  email: string;
+  /** Prefill from an approved vendor application (0029), so the owner only checks it. */
+  initial?: { name: string; address: string; phone: string; vatNo: string; currency: string };
+  approved?: boolean;
+}) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedInAs, setSignedInAs] = useState(email);
   const [form, setForm] = useState({
-    name: "",
-    address: "",
-    phone: "",
-    vatNo: "",
-    currency: "LKR",
+    name: initial?.name ?? "",
+    address: initial?.address ?? "",
+    phone: initial?.phone ?? "",
+    vatNo: initial?.vatNo ?? "",
+    currency: initial?.currency || "LKR",
     bottleFee: "100",
     discount: "5",
   });
@@ -94,6 +103,11 @@ export function OnboardingForm({ email }: { email: string }) {
           </span>
           <h1 className="text-2xl font-semibold">Set up your shop</h1>
           <p className="mt-1 text-sm text-muted">Signed in as {signedInAs || "your account"}</p>
+          {approved && (
+            <p className="mt-3 rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
+              Your business was approved. Check the details below, then open your shop.
+            </p>
+          )}
         </div>
 
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-border bg-surface p-5">
@@ -163,6 +177,7 @@ function explain(message: string): string {
     return "Your session has expired. Sign in again, then create the shop.";
   }
   if (/shop name is required/i.test(message)) return "Enter your shop name.";
+  if (/wait for approval/i.test(message)) return "Your business has not been approved yet. Reload this page to see where it stands.";
   if (/bottle fee cannot be negative/i.test(message)) return "Bottle deposit cannot be negative.";
   if (/discount percentage/i.test(message)) return "Max cashier discount must be between 0 and 100.";
   if (/fetch|network/i.test(message)) return "No connection to the server. Check the internet and try again.";
