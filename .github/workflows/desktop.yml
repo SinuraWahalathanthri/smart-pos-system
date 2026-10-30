@@ -5,8 +5,10 @@ name: Desktop installers
 #
 # To publish a release:
 #   1. bump the version in package.json
-#   2. git tag v0.1.1 && git push origin v0.1.1
-# The installers are then attached to the GitHub Release for that tag.
+#   2. write .github/release-notes/v0.1.1.md (what changed, and any migrations it needs)
+#   3. git tag v0.1.1 && git push origin v0.1.1
+# The installers are then attached to the GitHub Release for that tag. The release text is that
+# version's notes followed by .github/release-notes/_installers.md (download table, signing note).
 
 on:
   push:
@@ -98,6 +100,18 @@ jobs:
             release/*.dmg
             release/*.AppImage
 
+      # A version without its own notes still gets the installer text, so a forgotten file never
+      # blocks a release.
+      - name: Compose the release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          {
+            if [ -f "$notes" ]; then cat "$notes"; echo; fi
+            cat .github/release-notes/_installers.md
+          } > release-body.md
+
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -107,19 +121,4 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.AppImage
-          body: |
-            ## Spice Shop POS — desktop
-
-            Download the installer for your computer:
-
-            | Platform | File |
-            | --- | --- |
-            | Windows | `Spice-Shop-POS-Setup-*.exe` |
-            | macOS | `Spice-Shop-POS-*-*.dmg` |
-            | Linux | `Spice-Shop-POS-*.AppImage` |
-
-            The desktop app and the website share the same database and the same login. A till can be
-            set up either way, and it keeps selling offline.
-
-            These builds are not code-signed, so Windows SmartScreen ("More info" → "Run anyway") and
-            macOS Gatekeeper (right-click the app → Open) will ask for confirmation the first time.
+          body_path: release-body.md
