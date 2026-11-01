@@ -1,5 +1,10 @@
 /**
- * Owner-changeable accent + light/dark theme (DESIGN.md §3.1b).
+ * Owner-changeable accent, surface tone and light/dark theme (DESIGN.md §3.1b, 0030).
+ *
+ * The shop's colours are chosen by the owner in Settings and stored on the shop (stores.theme), so
+ * every till and dashboard of that shop looks the same. They are copied into localStorage when the
+ * shop context loads, which is what lets the <head> script paint them before React starts, offline
+ * included. Light/dark stays a per-device choice: a till by a sunny window is not the back office.
  *
  * `applyThemeFromStorage` must stay fully self-contained (no imports, no outer references):
  * it is also inlined into <head> via toString() so the theme is right before first paint.
@@ -8,29 +13,62 @@ export type ThemeMode = "light" | "dark" | "system";
 
 export const THEME_KEY = "pos-theme";
 export const ACCENT_KEY = "pos-accent";
-export const DEFAULT_ACCENT = "#1d4ed8";
+/** Tillwise indigo. A shop that never chose colours gets the brand look: indigo on the neutral tone. */
+export const DEFAULT_ACCENT = "#4f46e5";
+export const TONE_KEY = "pos-tone";
+/** The shop's default light/dark, used only on a device whose person never chose one. */
+export const SHOP_MODE_KEY = "pos-shop-mode";
+
+export type Tone = "warm" | "neutral" | "cool" | "fresh" | "rose" | "midnight";
+
+/** Surface tones. The CSS for each lives in app/globals.css under [data-tone]. */
+export const TONES: { id: Tone; name: string; light: string; dark: string }[] = [
+  { id: "neutral", name: "Neutral", light: "#f7f7f8", dark: "#1b1b1f" },
+  { id: "warm", name: "Warm", light: "#faf8f5", dark: "#201c17" },
+  { id: "cool", name: "Cool", light: "#f5f7fa", dark: "#151c28" },
+  { id: "fresh", name: "Fresh", light: "#f5f9f6", dark: "#17211b" },
+  { id: "rose", name: "Rose", light: "#fbf7f8", dark: "#22181c" },
+  { id: "midnight", name: "Midnight", light: "#f4f5fb", dark: "#12152a" },
+];
 
 export const ACCENT_PRESETS: { name: string; hex: string }[] = [
   { name: "Blue", hex: "#1d4ed8" },
+  { name: "Indigo", hex: "#4f46e5" },
   { name: "Teal", hex: "#0f766e" },
   { name: "Green", hex: "#15803d" },
-  { name: "Chilli", hex: "#c2410c" },
-  { name: "Turmeric", hex: "#b45309" },
+  { name: "Orange", hex: "#c2410c" },
+  { name: "Amber", hex: "#b45309" },
+  { name: "Red", hex: "#b91c1c" },
+  { name: "Pink", hex: "#be185d" },
   { name: "Plum", hex: "#7e22ce" },
   { name: "Slate", hex: "#475569" },
 ];
 
-export function applyThemeFromStorage(override?: { mode?: string; accent?: string }): void {
+export function applyThemeFromStorage(override?: { mode?: string; accent?: string; tone?: string }): void {
   const root = document.documentElement;
   let mode = override?.mode;
   let accent = override?.accent;
+  let tone = override?.tone;
   try {
-    mode = mode ?? localStorage.getItem("pos-theme") ?? "system";
-    accent = accent ?? localStorage.getItem("pos-accent") ?? "#1d4ed8";
+    mode = mode ?? localStorage.getItem("pos-theme") ?? localStorage.getItem("pos-shop-mode") ?? "system";
+    accent = accent ?? localStorage.getItem("pos-accent") ?? "#4f46e5";
+    tone = tone ?? localStorage.getItem("pos-tone") ?? "neutral";
   } catch {
     mode = mode ?? "system";
-    accent = accent ?? "#1d4ed8";
+    accent = accent ?? "#4f46e5";
+    tone = tone ?? "neutral";
   }
+  // Dark surface per tone, so the accent is lightened against the surface it will actually sit on.
+  const darkSurfaces: Record<string, [number, number, number]> = {
+    warm: [32, 28, 23],
+    neutral: [27, 27, 31],
+    cool: [21, 28, 40],
+    fresh: [23, 33, 27],
+    rose: [34, 24, 28],
+    midnight: [18, 21, 42],
+  };
+  if (!darkSurfaces[tone]) tone = "neutral";
+  root.setAttribute("data-tone", tone);
   const resolved =
     mode === "dark" || (mode !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches)
       ? "dark"
@@ -38,7 +76,7 @@ export function applyThemeFromStorage(override?: { mode?: string; accent?: strin
   root.setAttribute("data-theme", resolved);
 
   const hexToRgb = (h: string): [number, number, number] => {
-    const m = /^#?([0-9a-f]{6})$/i.exec(h) ?? /^#?([0-9a-f]{6})$/i.exec("1d4ed8")!;
+    const m = /^#?([0-9a-f]{6})$/i.exec(h) ?? /^#?([0-9a-f]{6})$/i.exec("4f46e5")!;
     const n = parseInt(m[1], 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   };
@@ -64,7 +102,7 @@ export function applyThemeFromStorage(override?: { mode?: string; accent?: strin
   const base = hexToRgb(accent);
   const white: [number, number, number] = [255, 255, 255];
   const black: [number, number, number] = [0, 0, 0];
-  const surface: [number, number, number] = resolved === "dark" ? [32, 28, 23] : [255, 255, 255];
+  const surface: [number, number, number] = resolved === "dark" ? darkSurfaces[tone] : [255, 255, 255];
 
   let primary = base;
   if (resolved === "light") {
@@ -115,6 +153,57 @@ export function setAccent(hex: string): void {
     /* storage blocked */
   }
   applyThemeFromStorage({ accent: hex });
+}
+
+export function getStoredTone(): Tone {
+  try {
+    const v = localStorage.getItem(TONE_KEY);
+    return TONES.some((t) => t.id === v) ? (v as Tone) : "neutral";
+  } catch {
+    return "neutral";
+  }
+}
+
+export function setTone(tone: Tone): void {
+  try {
+    localStorage.setItem(TONE_KEY, tone);
+  } catch {
+    /* storage blocked */
+  }
+  applyThemeFromStorage({ tone });
+}
+
+/**
+ * Adopt the shop's saved colours (stores.theme). Called whenever the shop context loads, on the
+ * dashboard and the till. A shop that never chose colours keeps whatever the device already shows.
+ */
+export function applyShopTheme(theme: { accent?: string; tone?: string; mode?: string } | null | undefined): void {
+  if (!theme) return;
+  try {
+    if (theme.accent) localStorage.setItem(ACCENT_KEY, theme.accent);
+    if (theme.tone) localStorage.setItem(TONE_KEY, theme.tone);
+    if (theme.mode) localStorage.setItem(SHOP_MODE_KEY, theme.mode);
+    else localStorage.removeItem(SHOP_MODE_KEY);
+  } catch {
+    /* storage blocked: still apply for this page */
+  }
+  applyThemeFromStorage({ accent: theme.accent, tone: theme.tone });
+}
+
+/**
+ * WCAG contrast of white text on the accent as the app will actually draw it (after darkening), so
+ * Settings can say plainly whether a chosen colour reads well on a button.
+ */
+export function accentContrast(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  const l = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  return 1.05 / (l + 0.05);
 }
 
 /** Source for the inline <head> script. */

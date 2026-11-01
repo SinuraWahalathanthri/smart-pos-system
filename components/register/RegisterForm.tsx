@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, MailCheck, Store } from "lucide-react";
+import { ArrowRight, Loader2, MailCheck } from "lucide-react";
 import { getSupabase, isConnected } from "@/lib/supabase/client";
 import {
   CAPTCHA_SITE_KEY,
@@ -15,6 +15,7 @@ import {
   resendVerification,
 } from "@/lib/registration";
 import { Captcha } from "./Captcha";
+import { LogoMark } from "../ui/Logo";
 
 /**
  * Step 1 of registration: the owner's own account.
@@ -208,8 +209,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <Link href="/" className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-primary-fg">
-            <Store size={26} />
+          <Link href="/" className="mx-auto mb-3 block w-14" aria-label="Home">
+            <LogoMark size={56} />
           </Link>
           <h1 className="text-2xl font-semibold">Register your business</h1>
           <p className="mt-1 text-sm text-muted">on {PLATFORM_NAME}</p>

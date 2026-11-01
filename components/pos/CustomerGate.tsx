@@ -7,6 +7,7 @@ import { getSupabase, isConnected } from "@/lib/supabase/client";
 import { usePos } from "@/lib/store";
 import { Dialog, Button } from "../ui/Dialog";
 import type { Customer } from "./CustomerDialog";
+import { useTillProfile } from "./useTillProfile";
 
 export type CustomerCard = Customer & {
   points: number;
@@ -27,6 +28,7 @@ export type CustomerCard = Customer & {
  * the majority who are not registered, which is how cashiers learn to fake numbers.
  */
 export function CustomerGate({ onDone }: { onDone: (c: CustomerCard | null) => void }) {
+  const { features } = useTillProfile();
   const notify = usePos((s) => s.notify);
   const [phone, setPhone] = useState("");
   const [found, setFound] = useState<CustomerCard | null>(null);
@@ -198,8 +200,8 @@ export function CustomerGate({ onDone }: { onDone: (c: CustomerCard | null) => v
         {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
         <p className="text-xs text-muted">
-          Walk-in orders are still recorded and stock still moves; they just earn no points and cannot be tied to a
-          bottle loan.
+          Walk-in orders are still recorded and stock still moves; they just earn no points
+          {features.bottles ? " and cannot be tied to a bottle loan" : ""}.
         </p>
       </div>
     </Dialog>

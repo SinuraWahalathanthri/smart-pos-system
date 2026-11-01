@@ -1,8 +1,14 @@
-# Spice Shop POS
+# Tillwise
 
-Barcode point-of-sale for a spice manufacturer and grocery: keyboard-first checkout, branded spice
-packets sold by size, glass-bottle milk with a non-return fee, supervisor approval by badge + PIN,
-offline selling, and a Supabase backend.
+Point of sale for any business: a clothing shop, a grocery, a pharmacy, a hardware store, a salon or a
+spice manufacturer. Keyboard-first checkout that keeps selling offline, size and colour variants,
+packets, sell-by-measure, services, batches and expiry, returnable bottles, supervisor approval by
+badge + PIN, a back office with finance, and a Supabase backend.
+
+Each shop picks its **type of business** (at registration, or later in **Settings**). That decides the
+default features, units and wording; the owner can switch any feature on or off and choose the shop's
+colours. (Tillwise was called Spice Shop POS until 2.3.0. The name is set in `lib/brand.ts` and
+`electron-builder.config.js`, or per deployment with `NEXT_PUBLIC_PLATFORM_NAME`.)
 
 - **[PLAN.md](PLAN.md)** — what the system does and the build phases
 - **[DESIGN.md](DESIGN.md)** — look, layout and interaction rules
@@ -192,6 +198,27 @@ approved application. To switch it on in Supabase:
 The mock (`npm run dev:mock`) supports the whole flow: sign in as `admin@platform.test` /
 `admin-password`, and confirm a registered email with
 `curl -X POST "http://127.0.0.1:54321/__mock/confirm?email=..."`.
+
+#### Any kind of business (migration `0030`)
+
+Run `supabase/migrations/0030_business_types.sql` after `0029`. It adds:
+
+- **Business types and features.** The owner picks a type in **Settings** (registration asks for it
+  too). The type sets which features are on: variants, pack sizes, sell by measure, services,
+  batches and expiry, returnable bottles, production. Any of them can be switched on or off; turning one
+  off only hides it from the screens, and nothing recorded is lost. Shops from before 0030 keep every
+  feature they had.
+- **Variants.** One product in sizes, colours or styles: list the values, press **Generate**, and each
+  combination gets its own price, opening stock and barcode. Scanning a variant's barcode adds exactly
+  that variant; tapping the product opens a picker with a chip row per option.
+- **Units and sell by measure.** Products are counted in a chosen unit (piece, pair, box, kg, litre,
+  metre, hour…). A *by measure* product asks the cashier for an amount (2.5 m, 0.75 kg) and prices it
+  per unit.
+- **Services.** Items with no stock never write the stock ledger.
+- **Batches and expiry.** Receiving stock can record a batch and expiry date; sales use the batch that
+  expires first, and Products shows what expires within 30 days.
+- **Colours.** An accent colour and a background tone per shop, previewed live and applied to every
+  till and dashboard of that shop. Light or dark stays a per-device choice.
 
 #### What the platform administrator can and cannot do
 

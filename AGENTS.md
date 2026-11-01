@@ -129,6 +129,53 @@ the shop switcher, receipts and stock history crashed under it while working on 
 **Analytics hide cost, not just the button.** `product_analytics()` returns null `cost_cents` and
 `margin_cents` for a supervisor, so the number never reaches the browser.
 
+## Any kind of business (0030, `lib/business.ts`)
+
+**`pack_sizes` is the option table for every kind of product.** A `weighted` product's options are
+packets (`weight_g` set); a `variant` product's options are size/colour combinations (`attributes`,
+no weight). Do not build a second variant table: sales, refunds, barcodes, stock and cost already
+key on `pack_size_id`, which is why variants needed no change to `complete_sale()`. Anything that
+divides by `weight_g` must handle null (0030 had to fix `apply_inbound_cost()` for exactly this).
+
+**Two lists live in both SQL and TypeScript and are tested to match:** business types
+(`is_business_type()` / `BUSINESS_PROFILES`) and units (`is_product_unit()` / `UNITS`).
+`tests/business-profile.test.ts` reads the migration and fails if they drift. Add to both, in a new
+migration.
+
+**Features are cosmetic by design.** `stores.features` holds only the owner's overrides of the type's
+defaults (`featureOverrides()`); switching a feature off hides screens, it never hides recorded data
+or refuses a sale. A shop with `business_type` null is a pre-0030 shop and gets the LEGACY feature set
+(packs, bottles, production). Never "fix" null to a default type: that would silently switch off a
+live shop's bottle book.
+
+**Services never touch stock, by trigger.** `skip_untracked_stock()` drops any `stock_movements` row for
+a `track_stock = false` product, so every writer (sale, refund, cancel, production) is covered without
+knowing about services. **Batches** are consumed first-to-expire by `consume_batches()` on every
+negative movement; they are bookkeeping for the expiry report, while on-hand counts still come only
+from the ledger.
+
+**A measured line's label is its unit** ("metre"), so receipts and `label_snapshot` read "2.5 metre"
+without knowing about units. Quantities are rounded to 3 decimals (`roundQty`) wherever they are added
+or split; a float sum must never reach the server.
+
+**Barcodes are claimed, never moved.** `claim_barcode()` refuses a code another product owns. Before
+0030 `save_product` silently re-pointed it, which broke the other product's scan without a word.
+
+**Colours belong to the shop, light/dark to the device.** `stores.theme` holds only `accent` (hex),
+`tone` and an optional default `mode`, validated by `clean_store_theme()`; every shade is derived in
+`lib/theme.ts`, which keeps button text at 4.5:1, so no saved theme can make the till unreadable.
+`applyShopTheme()` copies it into localStorage so the `<head>` script paints it before React, offline
+too. Tone CSS selectors name both `data-theme` and `data-tone`: equal specificity would let a light
+tone override the dark palette.
+
+**Currency follows the shop.** `formatMoney()` used to print a literal "LKR". `setCurrency()` is called
+by `useShop()` and the till; do not reintroduce a hardcoded code.
+
+**The product is called Tillwise** (`lib/brand.ts`, `electron-builder.config.js`). The Electron
+`APP_ID` keeps its old `spiceshop` value on purpose (it makes the installer upgrade the existing app),
+and `desktop/main.js` keeps using the old "Spice Shop POS" data folder when it exists, so unsynced
+offline sales survive the rename. Do not "tidy" either.
+
 ## Toolchain
 
 **Next.js is pinned exactly (no `^`)**. `next` and `eslint-config-next` must

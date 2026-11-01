@@ -9,9 +9,16 @@
  * Node code at runtime except `desktop/main.js`.
  */
 
-/** A single place to change the app identity. */
+/**
+ * A single place to change the app identity.
+ *
+ * APP_ID keeps its original value on purpose. Windows and macOS recognise an installed app by it, so
+ * the renamed installer upgrades the existing till in place instead of installing a second app next
+ * to it. The product name can change freely; desktop/main.js keeps the old data folder (see
+ * LEGACY_DATA_DIR there) so offline sales waiting to upload survive the rename.
+ */
 const APP_ID = "lk.exonsoftware.spiceshop.pos";
-const PRODUCT_NAME = "Spice Shop POS";
+const PRODUCT_NAME = "Tillwise";
 
 module.exports = {
   appId: APP_ID,

@@ -8,32 +8,14 @@ import { getSupabase } from "@/lib/supabase/client";
  */
 
 /** The product's name on the public pages. A shop's own name is used everywhere once it exists. */
-export const PLATFORM_NAME = process.env.NEXT_PUBLIC_PLATFORM_NAME || "Smart POS";
+export { APP_NAME as PLATFORM_NAME } from "./brand";
 
 /** Cloudflare Turnstile site key. Public by design; the secret lives in Supabase Auth's settings. */
 export const CAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
-export type BusinessType =
-  | "retail"
-  | "grocery"
-  | "restaurant"
-  | "pharmacy"
-  | "services"
-  | "wholesale"
-  | "manufacturing"
-  | "other";
-
-/** Must match the check constraint on vendor_applications.business_type. */
-export const BUSINESS_TYPES: { id: BusinessType; label: string; hint: string }[] = [
-  { id: "retail", label: "Retail shop", hint: "Clothing, electronics, hardware, books" },
-  { id: "grocery", label: "Grocery or mini-market", hint: "Packaged food, household goods" },
-  { id: "restaurant", label: "Restaurant or café", hint: "Food and drink served to order" },
-  { id: "pharmacy", label: "Pharmacy", hint: "Medicines and health products" },
-  { id: "services", label: "Services", hint: "Salon, repairs, laundry" },
-  { id: "wholesale", label: "Wholesale or distribution", hint: "Selling in bulk to other businesses" },
-  { id: "manufacturing", label: "Manufacturer with a shop", hint: "Makes what it sells, like spices or bakery" },
-  { id: "other", label: "Something else", hint: "Tell us in the business name" },
-];
+/** One list for registration, Settings and the database check (lib/business.ts, 0030). */
+import type { BusinessType } from "./business";
+export { BUSINESS_TYPES, type BusinessType } from "./business";
 
 /** A short list with the currency each country trades in; the currency stays editable. */
 export const COUNTRIES: { name: string; currency: string }[] = [

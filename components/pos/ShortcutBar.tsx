@@ -1,7 +1,8 @@
 "use client";
 
 import { Keycap } from "../ui/Dialog";
-import { SHORTCUTS } from "@/lib/shortcuts";
+import { SHORTCUTS, shortcutEnabled } from "@/lib/shortcuts";
+import { useTillProfile } from "./useTillProfile";
 
 /**
  * Bottom strip of active shortcuts; each is also a button (mouse works for everything).
@@ -11,9 +12,10 @@ import { SHORTCUTS } from "@/lib/shortcuts";
  * and the first client render identical, so hydration never disagrees on a touch screen.
  */
 export function ShortcutBar({ onRun }: { onRun: (id: string) => void }) {
+  const { features } = useTillProfile();
   return (
     <nav aria-label="Shortcuts" className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-surface px-3">
-      {SHORTCUTS.filter((s) => s.bar).map((s) => (
+      {SHORTCUTS.filter((s) => s.bar && shortcutEnabled(s.id, features)).map((s) => (
         <button
           key={s.id}
           type="button"

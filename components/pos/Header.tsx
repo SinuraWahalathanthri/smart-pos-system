@@ -13,6 +13,7 @@ import { getSupabase, isConnected } from "@/lib/supabase/client";
 import { useSync } from "@/lib/sync/engine";
 import {
   ACCENT_PRESETS,
+  DEFAULT_ACCENT,
   getStoredAccent,
   getStoredDockSide,
   getStoredMode,
@@ -25,7 +26,7 @@ import {
 function ThemeMenu() {
   const [open, setOpen] = useState(false);
   const [mode, setModeState] = useState<ThemeMode>("system");
-  const [accent, setAccentState] = useState("#1d4ed8");
+  const [accent, setAccentState] = useState(DEFAULT_ACCENT);
   const [muted, setMutedState] = useState(false);
   const [dockSide, setDockSideState] = useState<"left" | "right">("right");
   const ref = useRef<HTMLDivElement>(null);
@@ -93,6 +94,14 @@ function ThemeMenu() {
               </button>
             ))}
           </div>
+          {/* A connected shop's colours belong to the shop (Settings), and would replace a choice made
+              here the next time the shop loads; only light/dark is per device. */}
+          {isConnected() ? (
+            <p className="mb-4 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
+              Shop colours are chosen by the owner in the dashboard, under Settings.
+            </p>
+          ) : (
+            <>
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Accent colour</p>
           <div className="flex flex-wrap items-center gap-2">
             {ACCENT_PRESETS.map((p) => (
@@ -124,7 +133,9 @@ function ThemeMenu() {
               Custom
             </label>
           </div>
-          <p className="mt-2 text-xs text-muted">Text contrast is adjusted automatically.</p>
+          <p className="mb-4 mt-2 text-xs text-muted">Text contrast is adjusted automatically.</p>
+            </>
+          )}
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Mobile buttons</p>
           <div className="mb-2 flex gap-2">
             {(["left", "right"] as const).map((side) => (

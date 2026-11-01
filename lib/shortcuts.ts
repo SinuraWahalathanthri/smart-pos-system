@@ -11,6 +11,17 @@ export interface Shortcut {
   barLabel?: string;
 }
 
+/**
+ * Shortcuts that belong to a feature a shop can switch off (lib/business.ts). A clothing shop has no
+ * bottles, so F7 would point at nothing; it is hidden from the bar, the dock and the palette.
+ */
+export const SHORTCUT_FEATURE: Record<string, "bottles"> = { bottle: "bottles" };
+
+export function shortcutEnabled(id: string, features: Partial<Record<"bottles", boolean>>): boolean {
+  const f = SHORTCUT_FEATURE[id];
+  return !f || features[f] !== false;
+}
+
 export const SHORTCUTS: Shortcut[] = [
   { id: "qty", keys: "F2", label: "Change quantity of selected line", group: "Bill", bar: true, barLabel: "Qty" },
   { id: "search", keys: "F3", label: "Find product by name or code", group: "Find", bar: true, barLabel: "Find" },

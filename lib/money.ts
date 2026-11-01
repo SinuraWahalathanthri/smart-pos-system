@@ -1,5 +1,31 @@
-/** Money is held as integer cents (LKR 1.00 = 100) so arithmetic never drifts. */
+/** Money is held as integer cents (1.00 = 100) so arithmetic never drifts. */
 export type Cents = number;
+
+/**
+ * The shop's currency code, shown in front of amounts. It used to be the literal "LKR", so a shop in
+ * the UK or India saw rupees on every bill. useShop() and the till set it from the shop as soon as it
+ * loads, and it is remembered so the next start (offline included) shows the right code at once.
+ */
+const CURRENCY_KEY = "pos-currency";
+let currencyCode = "LKR";
+try {
+  const saved = typeof window !== "undefined" ? window.localStorage.getItem(CURRENCY_KEY) : null;
+  if (saved && /^[A-Z]{3}$/.test(saved)) currencyCode = saved;
+} catch {
+  /* storage blocked: keep the default */
+}
+
+export function setCurrency(code: string | null | undefined): void {
+  if (!code || !/^[A-Z]{3}$/.test(code) || code === currencyCode) return;
+  currencyCode = code;
+  try {
+    window.localStorage.setItem(CURRENCY_KEY, code);
+  } catch {
+    /* storage blocked */
+  }
+}
+
+export const currentCurrency = () => currencyCode;
 
 export const toCents = (rupees: number): Cents => Math.round(rupees * 100);
 
@@ -9,7 +35,7 @@ export function formatMoney(cents: Cents, withSymbol = true): string {
   const rupees = Math.floor(abs / 100);
   const rest = String(abs % 100).padStart(2, "0");
   const grouped = rupees.toLocaleString("en-US");
-  return `${sign}${withSymbol ? "LKR " : ""}${grouped}.${rest}`;
+  return `${sign}${withSymbol ? currencyCode + " " : ""}${grouped}.${rest}`;
 }
 
 /** Tax contained in a tax-inclusive gross amount. */
@@ -22,9 +48,9 @@ export function lineTotal(unitPrice: Cents, qty: number): Cents {
   return Math.round(unitPrice * qty);
 }
 
-/** Parse what a cashier types into a money field: "1,500", "1500.5", "250". */
+/** Parse what a cashier types into a money field: "1,500", "1500.5", "250", "Rs. 250", "£2.50". */
 export function parseMoneyInput(input: string): Cents | null {
-  const cleaned = input.replace(/[,\s]|LKR|Rs\.?/gi, "");
+  const cleaned = input.replace(/[,\s]|Rs\.?|[A-Z]{3}|[$£€₹¥]/gi, "");
   if (cleaned === "" || !/^\d*\.?\d{0,2}$/.test(cleaned) || cleaned === ".") return null;
   return toCents(Number(cleaned));
 }

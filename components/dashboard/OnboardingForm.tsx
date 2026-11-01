@@ -117,7 +117,7 @@ export function OnboardingForm({
               autoFocus
               value={form.name}
               onChange={set("name")}
-              placeholder="Sinura Spice House"
+              placeholder="e.g. Lakeside Traders"
               maxLength={120}
             />
           </Field>

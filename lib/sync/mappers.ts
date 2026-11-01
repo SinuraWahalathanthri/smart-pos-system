@@ -6,7 +6,9 @@ export interface ServerProductRow {
   name: string;
   sku: string | null;
   kind: string;
-  sale_mode: "unit" | "weighted";
+  sale_mode: "unit" | "weighted" | "variant" | "measured";
+  unit?: string | null;
+  track_stock?: boolean | null;
   price_cents: number | string;
   tax_rate_pct: number | string;
   stock_on_hand: number | string;
@@ -20,7 +22,8 @@ export interface ServerProductRow {
   pack_sizes: {
     id: string;
     label: string;
-    weight_g: number;
+    weight_g: number | null;
+    attributes?: Record<string, string> | null;
     price_cents: number | string;
     packets_on_hand: number | string;
     sort_order: number;
@@ -36,12 +39,31 @@ export interface ServerProductRow {
  * sizes come down and the packaging link is ignored.
  */
 export const CATALOGUE_SELECT =
-  "id,name,sku,kind,sale_mode,price_cents,tax_rate_pct,stock_on_hand,reorder_level,is_favourite," +
+  "id,name,sku,kind,sale_mode,unit,track_stock,price_cents,tax_rate_pct,stock_on_hand,reorder_level,is_favourite," +
   "is_returnable_bottle,color,image_path,is_active,categories(name)," +
-  "pack_sizes!pack_sizes_product_id_fkey(id,label,weight_g,price_cents,packets_on_hand,sort_order,is_active)," +
+  "pack_sizes!pack_sizes_product_id_fkey(id,label,weight_g,attributes,price_cents,packets_on_hand,sort_order,is_active)," +
   "product_barcodes(barcode,pack_size_id,is_primary)";
 
 const num = (v: number | string | null | undefined) => (v === null || v === undefined ? 0 : Number(v));
+
+/**
+ * The dashboard used to save a tile colour as a word ("amber"), while the till draws it as a hex
+ * colour with an alpha suffix (`${color}22`). "amber22" is not a colour, so those tiles rendered with
+ * no tint at all. Words from the old form map to the hex they meant; anything else that is not a hex
+ * falls back to a neutral stone.
+ */
+export const TILE_COLORS: Record<string, string> = {
+  amber: "#b45309",
+  red: "#b91c1c",
+  green: "#15803d",
+  blue: "#1d4ed8",
+  purple: "#7e22ce",
+  slate: "#475569",
+};
+export function tileColor(c: string | null | undefined): string {
+  if (c && /^#[0-9a-f]{6}$/i.test(c)) return c;
+  return (c && TILE_COLORS[c.toLowerCase()]) || "#78716c";
+}
 
 /** Server product row -> the shape the till uses. */
 export function mapProduct(row: ServerProductRow): Product {
@@ -52,11 +74,12 @@ export function mapProduct(row: ServerProductRow): Product {
 
   const packSizes: PackSize[] = [...(row.pack_sizes ?? [])]
     .filter((p) => p.is_active)
-    .sort((a, b) => a.sort_order - b.sort_order || a.weight_g - b.weight_g)
+    .sort((a, b) => a.sort_order - b.sort_order || (a.weight_g ?? 0) - (b.weight_g ?? 0) || a.label.localeCompare(b.label))
     .map((p) => ({
       id: p.id,
       label: p.label,
-      weightG: p.weight_g,
+      weightG: p.weight_g ?? undefined,
+      attributes: p.attributes && Object.keys(p.attributes).length ? p.attributes : undefined,
       price: num(p.price_cents),
       barcode: byPack.get(p.id),
       stock: num(p.packets_on_hand),
@@ -76,7 +99,9 @@ export function mapProduct(row: ServerProductRow): Product {
     favourite: row.is_favourite,
     // Only a full URL is shown for now; Storage paths are resolved when image upload is added.
     imageUrl: row.image_path && /^https?:\/\//.test(row.image_path) ? row.image_path : undefined,
-    color: row.color ?? "#78716c",
+    color: tileColor(row.color),
+    unit: row.unit ?? "pcs",
+    trackStock: row.track_stock ?? true,
     returnableBottle: row.is_returnable_bottle,
     reorderLevel: num(row.reorder_level),
     active: row.is_active,

@@ -7,11 +7,11 @@ import {
   Boxes,
   ScanLine,
   ShieldCheck,
-  Store,
   Users,
   WifiOff,
 } from "lucide-react";
 import { BUSINESS_TYPES, PLATFORM_NAME } from "@/lib/registration";
+import { Logo } from "../ui/Logo";
 
 const FEATURES = [
   { Icon: ScanLine, title: "Fast checkout", text: "Barcode-first, keyboard shortcuts for every action, and a touch layout for phones and tablets." },
@@ -38,10 +38,7 @@ export function Landing() {
     <main className="min-h-dvh bg-bg text-text">
       <header className="border-b border-border bg-surface/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-fg">
-            <Store size={18} />
-          </span>
-          <span className="mr-auto text-base font-semibold">{PLATFORM_NAME}</span>
+          <Logo size={34} className="mr-auto" />
           <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-2 hover:text-text">
             Sign in
           </Link>

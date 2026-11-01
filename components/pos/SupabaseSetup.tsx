@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SHOP_NAME } from "@/lib/config";
 import {
   clearSupabaseConfig,
   getSupabaseConfig,
@@ -15,6 +14,7 @@ import {
 } from "@/lib/supabase/config";
 import { resetSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "../ui/Dialog";
+import { LogoMark } from "../ui/Logo";
 
 /**
  * Where the shopkeeper pastes their Supabase project URL and anon key.
@@ -82,9 +82,7 @@ export function SupabaseSetup({ onDone }: { onDone?: () => void }) {
   return (
     <div className="w-full max-w-lg">
       <div className="mb-6 text-center">
-        <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-2xl font-bold text-primary-fg">
-          {SHOP_NAME[0]}
-        </span>
+        <LogoMark size={56} className="mx-auto mb-3" />
         <h1 className="text-2xl font-semibold">{existing ? "Database connection" : "Connect your database"}</h1>
         <p className="text-sm text-muted">
           {shipped

@@ -5,6 +5,7 @@ import { Loader2, Phone, UserPlus, X } from "lucide-react";
 import { getSupabase, isConnected } from "@/lib/supabase/client";
 import { usePos, type CustomerCardState } from "@/lib/store";
 import { Dialog, Button } from "../ui/Dialog";
+import { useTillProfile } from "./useTillProfile";
 
 export type Customer = {
   id: string;
@@ -192,6 +193,7 @@ export function CustomerDialog({ onClose, onAttached }: { onClose: () => void; o
 }
 
 function FoundCard({ c, onUse }: { c: Customer; onUse: () => void }) {
+  const { features } = useTillProfile();
   const bottles = c.bottles_out ?? 0;
   return (
     <div className="rounded-lg border border-border bg-surface-2 p-3">
@@ -210,7 +212,7 @@ function FoundCard({ c, onUse }: { c: Customer; onUse: () => void }) {
           Has {bottles} bottle{bottles === 1 ? "" : "s"} of ours. Register the return before taking payment.
         </p>
       ) : (
-        <p className="mt-2 text-xs text-muted">No bottles outstanding.</p>
+        features.bottles && <p className="mt-2 text-xs text-muted">No bottles outstanding.</p>
       )}
     </div>
   );

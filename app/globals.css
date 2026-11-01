@@ -11,7 +11,7 @@
   --border: #e3ddd3;
   --text: #1f1a14;
   --text-muted: #6b6257;
-  --primary: #1d4ed8;
+  --primary: #4f46e5;
   --primary-fg: #ffffff;
   --primary-soft: #e3eafc;
   --success: #15803d;
@@ -42,6 +42,93 @@
   --danger-soft: #3d1a1a;
   --shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
+}
+
+/*
+ * Surface tones (0030, lib/theme.ts TONES). "warm" is the :root palette above, kept as it was.
+ * Only the neutrals change; status colours keep their meaning in every tone. Each selector names
+ * both attributes so a light tone can never override the dark palette (equal specificity would
+ * otherwise let source order decide).
+ */
+:root:not([data-theme="dark"])[data-tone="neutral"] {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #efeff1;
+  --border: #e2e2e6;
+  --text: #18181b;
+  --text-muted: #63636b;
+}
+:root[data-theme="dark"][data-tone="neutral"] {
+  --bg: #111113;
+  --surface: #1b1b1f;
+  --surface-2: #26262b;
+  --border: #36363d;
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+}
+:root:not([data-theme="dark"])[data-tone="cool"] {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eaeef4;
+  --border: #dbe2ec;
+  --text: #0f172a;
+  --text-muted: #5b6678;
+}
+:root[data-theme="dark"][data-tone="cool"] {
+  --bg: #0d121b;
+  --surface: #151c28;
+  --surface-2: #1e2735;
+  --border: #2c3749;
+  --text: #eef2f8;
+  --text-muted: #9aa6b8;
+}
+:root:not([data-theme="dark"])[data-tone="fresh"] {
+  --bg: #f5f9f6;
+  --surface: #ffffff;
+  --surface-2: #e9f2ec;
+  --border: #d6e5da;
+  --text: #13201a;
+  --text-muted: #5a6b61;
+}
+:root[data-theme="dark"][data-tone="fresh"] {
+  --bg: #0f1612;
+  --surface: #17211b;
+  --surface-2: #203027;
+  --border: #2e4236;
+  --text: #eef6f0;
+  --text-muted: #9db3a5;
+}
+:root:not([data-theme="dark"])[data-tone="rose"] {
+  --bg: #fbf7f8;
+  --surface: #ffffff;
+  --surface-2: #f5ebee;
+  --border: #ead9de;
+  --text: #23161a;
+  --text-muted: #6f5c62;
+}
+:root[data-theme="dark"][data-tone="rose"] {
+  --bg: #171013;
+  --surface: #22181c;
+  --surface-2: #2d2026;
+  --border: #3f2e35;
+  --text: #f7eef1;
+  --text-muted: #b39fa6;
+}
+:root:not([data-theme="dark"])[data-tone="midnight"] {
+  --bg: #f4f5fb;
+  --surface: #ffffff;
+  --surface-2: #e8eaf6;
+  --border: #d8dbee;
+  --text: #14162b;
+  --text-muted: #5c6080;
+}
+:root[data-theme="dark"][data-tone="midnight"] {
+  --bg: #0b0d1a;
+  --surface: #12152a;
+  --surface-2: #1b1f3a;
+  --border: #2a2f52;
+  --text: #eef0ff;
+  --text-muted: #9ca1c9;
 }
 
 @theme inline {

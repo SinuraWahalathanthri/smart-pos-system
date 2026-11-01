@@ -47,7 +47,7 @@ export function VoidDialog({ lineId, approver, products, onClose }: { lineId: st
         setScan("");
         shake();
         playCue("error");
-        notify("That barcode isn't on this bill. Spice packs without a barcode: press Enter to remove the highlighted line.", "error");
+        notify("That barcode isn't on this bill. For an item without a barcode, press Enter to remove the highlighted line.", "error");
         return;
       }
       setScan("");

@@ -257,6 +257,13 @@ describe("0025 platform admin", () => {
       [`select public.platform_set_auto_approve(true)`, []],
       [`select public.verified_email()`, []],
       [`select public.caller_has_shop()`, []],
+      // 0030: any kind of business.
+      [`select public.save_shop_profile($1)`, [{ theme: { tone: "cool" } }]],
+      [`select public.receive_stock_batch($1,null,1,null,null,null,'B',null)`, [nothing]],
+      [`select public.expiring_batches(30)`, []],
+      [`select public.save_pack_sizes($1,'[]')`, [nothing]],
+      [`select public.claim_barcode($1,$1,null,'x')`, [nothing]],
+      [`select public.clean_store_theme('{}')`, []],
     ];
 
     await db.exec(`set role anon`);

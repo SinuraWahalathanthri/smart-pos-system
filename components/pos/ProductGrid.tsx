@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Star } from "lucide-react";
+import { hasOptions, unitLabel } from "@/lib/business";
 import { PACK_LOW_STOCK } from "@/lib/config";
 import { formatMoney } from "@/lib/money";
 import type { Product } from "@/lib/types";
@@ -18,11 +19,14 @@ export function categoriesOf(products: Product[]): string[] {
   return [ALL, ...Array.from(set).sort((a, b) => a.localeCompare(b))];
 }
 
-function stockState(p: Product): { label: string; tone: "ok" | "low" | "out" } {
-  if (p.saleMode === "weighted") {
+function stockState(p: Product): { label: string; tone: "ok" | "low" | "out" } | null {
+  // A service has no stock, so it gets no badge rather than a permanent "OUT".
+  if (p.trackStock === false) return null;
+  if (hasOptions(p)) {
     const total = p.packSizes.reduce((n, s) => n + s.stock, 0);
     if (total <= 0) return { label: "OUT", tone: "out" };
-    if (p.packSizes.some((s) => s.stock <= PACK_LOW_STOCK)) return { label: "LOW", tone: "low" };
+    // A clothing line routinely has sizes at zero; that is not "low", so variants show the total.
+    if (p.saleMode === "weighted" && p.packSizes.some((s) => s.stock <= PACK_LOW_STOCK)) return { label: "LOW", tone: "low" };
     return { label: `${total} in`, tone: "ok" };
   }
   if (p.stock <= 0) return { label: "OUT", tone: "out" };
@@ -38,7 +42,8 @@ const BADGE = {
 
 export function ProductTile({ product, onPick }: { product: Product; onPick: (p: Product) => void }) {
   const stock = stockState(product);
-  const cheapest = product.saleMode === "weighted" ? Math.min(...product.packSizes.map((s) => s.price)) : 0;
+  const options = hasOptions(product);
+  const cheapest = options && product.packSizes.length ? Math.min(...product.packSizes.map((s) => s.price)) : 0;
   const initials = product.name
     .split(/\s+/)
     .slice(0, 2)
@@ -52,7 +57,7 @@ export function ProductTile({ product, onPick }: { product: Product; onPick: (p:
       data-tile
       onClick={() => onPick(product)}
       className={`group flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-left transition hover:border-primary hover:shadow-md active:scale-[0.99] ${
-        stock.tone === "out" ? "opacity-60" : ""
+        stock?.tone === "out" ? "opacity-60" : ""
       }`}
     >
       <div
@@ -68,16 +73,20 @@ export function ProductTile({ product, onPick }: { product: Product; onPick: (p:
           </span>
         )}
         {product.favourite && <Star size={14} className="absolute left-2 top-2 fill-warning text-warning" />}
-        <span className={`absolute right-2 top-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${BADGE[stock.tone]}`}>
-          {stock.label}
-        </span>
+        {stock && (
+          <span className={`absolute right-2 top-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${BADGE[stock.tone]}`}>
+            {stock.label}
+          </span>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-0.5 px-3 py-2">
         <span className="line-clamp-2 min-h-[2.4em] text-[15px] font-semibold leading-tight">{product.name}</span>
         <span className="num text-sm text-muted">
-          {product.saleMode === "weighted"
-            ? `from ${formatMoney(cheapest, false)} · ${product.packSizes.length} sizes`
-            : formatMoney(product.price)}
+          {options
+            ? `from ${formatMoney(cheapest, false)} · ${product.packSizes.length} ${product.saleMode === "variant" ? "options" : "sizes"}`
+            : product.saleMode === "measured"
+              ? `${formatMoney(product.price)} / ${unitLabel(product.unit)}`
+              : formatMoney(product.price)}
         </span>
       </div>
     </button>

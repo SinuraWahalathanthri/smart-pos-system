@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PLATFORM_NAME } from "@/lib/registration";
+import { Logo } from "../ui/Logo";
 
 /**
  * Shell for /terms and /privacy.
@@ -12,8 +12,8 @@ export function LegalPage({ title, children }: { title: string; children: React.
   return (
     <main className="min-h-dvh px-4 py-10">
       <article className="mx-auto max-w-2xl space-y-4 text-sm leading-relaxed">
-        <Link href="/" className="text-sm text-primary hover:underline">
-          ← {PLATFORM_NAME}
+        <Link href="/" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+          ← <Logo size={22} />
         </Link>
         <h1 className="text-2xl font-semibold">{title}</h1>
         <p className="rounded-lg border border-warning/40 bg-warning/10 p-3">

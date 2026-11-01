@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { CheckCircle2, Lock, Trash2 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import { computeBill } from "@/lib/bill";
+import { computeBill, roundQty } from "@/lib/bill";
 import { CASHIER_DISCOUNT_LIMIT_PCT } from "@/lib/config";
 import { signInStaff } from "@/lib/data/access";
 import { getDb } from "@/lib/data/db";
@@ -51,13 +51,15 @@ export function QtyDialog({ onClose }: { onClose: () => void }) {
   const selectedId = usePos((s) => s.selectedId);
   const line = lines.find((l) => l.id === selectedId && !l.voided);
   const [value, setValue] = useState(String(line?.qty ?? 1));
+  // A measured line (0.75 kg) takes a decimal; everything else is counted in whole items.
+  const decimal = !!line?.unit;
 
   async function apply() {
     const s = usePos.getState();
     if (!line) return onClose();
-    const n = Math.floor(Number(value));
-    if (!Number.isFinite(n) || n < 1) {
-      s.notify("Enter a quantity of 1 or more", "warn");
+    const n = decimal ? roundQty(Number(value)) : Math.floor(Number(value));
+    if (!Number.isFinite(n) || n <= 0 || (!decimal && n < 1)) {
+      s.notify(decimal ? "Enter an amount greater than zero" : "Enter a quantity of 1 or more", "warn");
       return;
     }
     onClose();
@@ -93,8 +95,14 @@ export function QtyDialog({ onClose }: { onClose: () => void }) {
           <input
             data-autofocus
             value={value}
-            onChange={(e) => setValue(e.target.value.replace(/\D/g, "").slice(0, 3))}
-            inputMode="numeric"
+            onChange={(e) =>
+              setValue(
+                decimal
+                  ? e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1").slice(0, 8)
+                  : e.target.value.replace(/\D/g, "").slice(0, 3),
+              )
+            }
+            inputMode={decimal ? "decimal" : "numeric"}
             aria-label="Quantity"
             className="num h-14 w-full rounded-xl border-2 border-primary bg-surface px-3 text-center text-3xl font-bold outline-none"
           />

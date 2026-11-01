@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowDownUp, Loader2, SlidersHorizontal } from "lucide-react";
+import { unitLabel } from "@/lib/business";
 import { formatMoney } from "@/lib/money";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Category } from "./ProductsScreen";
@@ -44,12 +45,23 @@ const digits = (v: string) => v.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1
 export function StockPanel({
   product,
   weighted,
+  variant = false,
+  measured = false,
+  unit: countUnit = "pcs",
+  batches = false,
   currency,
   onClose,
   onDone,
 }: {
   product: { id: string; name: string };
+  /** Stock lives on the product's options (packets or variants), so one must be chosen. */
   weighted: boolean;
+  variant?: boolean;
+  /** Sold in a decimal amount of `unit` (0.75 kg), so quantities here may be decimals too. */
+  measured?: boolean;
+  unit?: string;
+  /** Ask for a batch number and expiry date on delivery (0030). */
+  batches?: boolean;
   currency: string;
   onClose: () => void;
   onDone: () => void;
@@ -63,6 +75,8 @@ export function StockPanel({
   const [cost, setCost] = useState("");
   const [supplier, setSupplier] = useState("");
   const [note, setNote] = useState("");
+  const [batchNo, setBatchNo] = useState("");
+  const [expiry, setExpiry] = useState("");
   const [why, setWhy] = useState<(typeof CORRECTIONS)[number]["key"]>("Damaged");
   const [countUp, setCountUp] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -77,7 +91,9 @@ export function StockPanel({
             .select("id, label, weight_g, packets_on_hand")
             .eq("product_id", product.id)
             .eq("is_active", true)
+            .order("sort_order")
             .order("weight_g")
+            .order("label")
         : Promise.resolve({ data: [] }),
       sb.rpc("product_movements", { p_product: product.id, p_limit: 25 }),
       sb.from("products").select("stock_on_hand").eq("id", product.id).maybeSingle(),
@@ -107,6 +123,8 @@ export function StockPanel({
     setCost("");
     setSupplier("");
     setNote("");
+    setBatchNo("");
+    setExpiry("");
   }
 
   async function submit(e: React.FormEvent) {
@@ -117,14 +135,26 @@ export function StockPanel({
     const sb = getSupabase();
     const { error: err } =
       mode === "receive"
-        ? await sb.rpc("receive_stock", {
-            p_product: product.id,
-            p_pack_size: weighted ? packSize : null,
-            p_qty: qtyNum,
-            p_unit_cost_cents: cost ? Math.round(Number(cost) * 100) : null,
-            p_supplier: supplier.trim() || null,
-            p_note: note.trim() || null,
-          })
+        ? // With a batch or expiry the movement and the batch row are written together.
+          batches && (batchNo.trim() || expiry)
+          ? await sb.rpc("receive_stock_batch", {
+              p_product: product.id,
+              p_pack_size: weighted ? packSize : null,
+              p_qty: qtyNum,
+              p_unit_cost_cents: cost ? Math.round(Number(cost) * 100) : null,
+              p_supplier: supplier.trim() || null,
+              p_note: note.trim() || null,
+              p_batch_no: batchNo.trim() || null,
+              p_expiry: expiry || null,
+            })
+          : await sb.rpc("receive_stock", {
+              p_product: product.id,
+              p_pack_size: weighted ? packSize : null,
+              p_qty: qtyNum,
+              p_unit_cost_cents: cost ? Math.round(Number(cost) * 100) : null,
+              p_supplier: supplier.trim() || null,
+              p_note: note.trim() || null,
+            })
         : await sb.rpc("adjust_stock", {
             p_product: product.id,
             p_pack_size: weighted ? packSize : null,
@@ -142,7 +172,9 @@ export function StockPanel({
     onDone();
   }
 
-  const unit = weighted ? "packets" : "units";
+  const unit = variant ? "pieces" : weighted ? "packets" : measured ? unitLabel(countUnit) : "units";
+  const optionNoun = variant ? "Variant" : "Packet size";
+  const countNoun = variant ? "Quantity" : weighted ? "Packets" : "Quantity";
 
   return (
     <div className="space-y-4 rounded-xl border border-border bg-surface p-4">
@@ -180,9 +212,9 @@ export function StockPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           {weighted && (
             <label className="block">
-              <span className="mb-1 block text-sm font-medium">Packet size</span>
+              <span className="mb-1 block text-sm font-medium">{optionNoun}</span>
               <select className="field" value={packSize} onChange={(e) => setPackSize(e.target.value)}>
-                {packs.length === 0 && <option value="">No packet sizes yet</option>}
+                {packs.length === 0 && <option value="">{variant ? "No variants yet" : "No packet sizes yet"}</option>}
                 {packs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label} ({Number(p.packets_on_hand)} on hand)
@@ -217,26 +249,21 @@ export function StockPanel({
 
           <label className="block">
             <span className="mb-1 block text-sm font-medium">
-              {mode === "receive"
-                ? weighted
-                  ? "Packets received"
-                  : "Quantity received"
-                : removing
-                  ? `${weighted ? "Packets" : "Quantity"} to remove`
-                  : `${weighted ? "Packets" : "Quantity"} to add`}
+              {mode === "receive" ? `${countNoun} received` : removing ? `${countNoun} to remove` : `${countNoun} to add`}
+              {measured && ` (${unitLabel(countUnit)})`}
             </span>
             <input
               className="field font-mono"
-              inputMode="numeric"
+              inputMode={measured ? "decimal" : "numeric"}
               autoFocus
               value={qty}
-              onChange={(e) => setQty(whole(e.target.value))}
+              onChange={(e) => setQty(measured ? digits(e.target.value) : whole(e.target.value))}
               placeholder="0"
             />
             {mode === "correct" && (
               <span className={`mt-1 block text-xs ${tooMany ? "text-danger" : "text-muted"}`}>
                 {onHand} {unit} on hand
-                {qtyNum > 0 && !tooMany && ` → ${removing ? onHand - qtyNum : onHand + qtyNum} after this`}
+                {qtyNum > 0 && !tooMany && ` → ${Math.round((removing ? onHand - qtyNum : onHand + qtyNum) * 1000) / 1000} after this`}
                 {tooMany && " - you cannot remove more than that"}
               </span>
             )}
@@ -261,10 +288,35 @@ export function StockPanel({
                   className="field"
                   value={supplier}
                   onChange={(e) => setSupplier(e.target.value)}
-                  placeholder="e.g. Kandy market"
+                  placeholder="e.g. Main wholesaler"
                   maxLength={80}
                 />
               </label>
+
+              {batches && (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium">Batch / lot number (optional)</span>
+                    <input
+                      className="field font-mono"
+                      value={batchNo}
+                      onChange={(e) => setBatchNo(e.target.value)}
+                      placeholder="e.g. LOT-2411"
+                      maxLength={40}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium">Expiry date (optional)</span>
+                    <input
+                      className="field"
+                      type="date"
+                      value={expiry}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setExpiry(e.target.value)}
+                    />
+                  </label>
+                </>
+              )}
             </>
           )}
 
@@ -274,13 +326,15 @@ export function StockPanel({
               className="field"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder={mode === "receive" ? "e.g. Weekly run" : "e.g. Rats got into the sack"}
+              placeholder={mode === "receive" ? "e.g. Weekly delivery" : "e.g. Dropped on the shop floor"}
               maxLength={120}
             />
           </label>
         </div>
 
-        {missingPack && <p className="text-sm text-danger">This product has no packet sizes. Add them in Edit first.</p>}
+        {missingPack && (
+          <p className="text-sm text-danger">This product has no {variant ? "variants" : "packet sizes"}. Add them in Edit first.</p>
+        )}
         {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
         <button
@@ -310,7 +364,7 @@ export function StockPanel({
                 <tr>
                   <th className="px-3 py-1.5">When</th>
                   <th className="px-3 py-1.5">Type</th>
-                  <th className="px-3 py-1.5">Packet</th>
+                  <th className="px-3 py-1.5">{weighted ? optionNoun : "Option"}</th>
                   <th className="px-3 py-1.5 text-right">Change</th>
                   <th className="px-3 py-1.5 text-right">Unit cost</th>
                   <th className="px-3 py-1.5">Detail</th>

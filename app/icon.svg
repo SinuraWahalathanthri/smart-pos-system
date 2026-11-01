@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Tillwise: a bold "T" whose crossbar is a till display, with a mint tap/scan dot.
+       Kept to three solid shapes so it still reads at 16 px. Rendered by `npm run icons`. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f46e5"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#c026d3"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.25" cy="0.15" r="0.75">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#glow)"/>
+  <g fill="#ffffff">
+    <rect x="224" y="248" width="576" height="164" rx="82"/>
+    <rect x="430" y="248" width="164" height="528" rx="82"/>
+  </g>
+  <rect x="300" y="306" width="120" height="48" rx="24" fill="#7c3aed" opacity="0.35"/>
+  <circle cx="712" cy="660" r="84" fill="#34d399"/>
+  <circle cx="712" cy="660" r="84" fill="none" stroke="#ffffff" stroke-width="20" opacity="0.9"/>
+</svg>

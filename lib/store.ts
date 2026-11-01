@@ -2,7 +2,8 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { addLine, computeBill, newId, voidQty } from "./bill";
+import { addLine, computeBill, newId, roundQty, voidQty } from "./bill";
+import { unitLabel } from "./business";
 import type { Cents } from "./money";
 import { isConnected } from "./supabase/client";
 import type { BillLine, BillSnapshot, BottleDeposit, HeldBill, PackSize, Product, SaleRecord, Staff } from "./types";
@@ -11,6 +12,7 @@ export type SessionUser = Pick<Staff, "id" | "name" | "role" | "code">;
 
 export type Dialog =
   | { type: "weight"; product: Product }
+  | { type: "measure"; product: Product }
   | { type: "pay"; exact?: boolean }
   | { type: "search" }
   | { type: "palette" }
@@ -134,13 +136,17 @@ export const usePos = create<PosState>()(
       setPendingQty: (n) => set({ pendingQty: Math.max(1, Math.min(999, Math.floor(n))) }),
 
       addProduct: (p, pack, qty) => {
-        const n = qty ?? get().pendingQty;
+        const n = roundQty(qty ?? get().pendingQty);
         const unitPrice = pack ? pack.price : p.price;
+        // A measured line's label is its unit ("kg"), so the bill, the receipt and the server's
+        // label_snapshot all read "0.75 kg" without each having to know about units.
+        const measured = !pack && p.saleMode === "measured";
         const { lines, id } = addLine(get().lines, {
           productId: p.id,
           packSizeId: pack?.id,
           name: p.name,
-          label: pack?.label,
+          label: pack?.label ?? (measured ? unitLabel(p.unit) : undefined),
+          unit: measured ? (p.unit ?? "pcs") : undefined,
           qty: n,
           unitPrice,
           taxRate: p.taxRate,
@@ -159,12 +165,16 @@ export const usePos = create<PosState>()(
       },
 
       setQty: (lineId, qty) =>
-        set({ lines: get().lines.map((l) => (l.id === lineId && !l.voided ? { ...l, qty: Math.max(1, qty) } : l)) }),
+        set({
+          lines: get().lines.map((l) =>
+            l.id === lineId && !l.voided ? { ...l, qty: l.unit ? Math.max(0.001, roundQty(qty)) : Math.max(1, Math.round(qty)) } : l,
+          ),
+        }),
       nudgeQty: (lineId, delta) => {
         const line = get().lines.find((l) => l.id === lineId && !l.voided);
         if (!line) return;
         // Raising is free; lowering to zero would be a removal, which needs a supervisor.
-        if (line.qty + delta < 1) {
+        if (line.qty + delta < (line.unit ? 0.001 : 1)) {
           get().notify("To remove a line, press F8 (supervisor needed)", "warn");
           return;
         }

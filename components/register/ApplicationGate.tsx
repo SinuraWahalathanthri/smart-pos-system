@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, Clock, Loader2, LogOut, MailWarning, MessageSquareWarning, RefreshCw, Store, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, LogOut, MailWarning, MessageSquareWarning, RefreshCw, XCircle } from "lucide-react";
 import { getSupabase, isConnected } from "@/lib/supabase/client";
 import {
   BUSINESS_TYPES,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/registration";
 import { OnboardingForm } from "@/components/dashboard/OnboardingForm";
 import { Button, Dialog } from "@/components/ui/Dialog";
+import { LogoMark } from "../ui/Logo";
 
 /**
  * /onboarding: everything between "I have an account" and "I have a shop".
@@ -167,8 +168,8 @@ function Frame({
     <main className="min-h-dvh px-4 py-10">
       <div className="mx-auto w-full max-w-2xl">
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/" className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-fg">
-            <Store size={20} />
+          <Link href="/" aria-label="Home">
+            <LogoMark size={44} />
           </Link>
           <div className="mr-auto">
             <h1 className="text-xl font-semibold">Register your business</h1>

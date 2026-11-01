@@ -198,7 +198,21 @@ sale function, one VAT rate, three fixed roles, LKR by default, one till. These 
 
 ### 3.1 Business type and modules
 
-**Status:** ⬜ · **Size:** L
+**Status:** 🟡 built in 0030, except the server-side refusals · **Size:** L
+
+Built: 14 business types (`lib/business.ts`, `public.is_business_type()`), chosen at registration and
+changeable in **Settings**. Each type switches on a default set of features (variants, pack sizes,
+sell by measure, services, batches and expiry, returnable bottles, production); the owner overrides
+any of them, and `stores.features` keeps only the overrides. The till, the dashboard menu and the
+product form hide what a shop has switched off. A shop from before 0030 (no type) keeps every feature
+it had.
+
+Still to build: functions refusing module-specific actions for shops that switched them off (today
+switching off is cosmetic, on purpose: nothing a shop recorded is ever hidden from its reports), and
+moving the bottle logic in `complete_sale()` behind the module. Tables and serial numbers are reserved
+feature keys with no screens yet.
+
+Original plan:
 
 - Each shop picks a **business type** at registration ([§1](#1-vendor-registration-self-sign-up-from-the-website)),
   which switches on a sensible set of **modules**.
@@ -212,7 +226,20 @@ sale function, one VAT rate, three fixed roles, LKR by default, one till. These 
 
 ### 3.2 Products: variants, modifiers and units
 
-**Status:** ⬜ · **Size:** XL
+**Status:** 🟡 variants, units and services built in 0030 · **Size:** XL
+
+Built: `variant` products (size × colour × style, generated as a grid), each option with its own price,
+stock, opening count, SKU and barcode. They reuse `pack_sizes`, which already carried stock, sales,
+refunds and barcodes per option, so nothing about the spice packets changed. `measured` products sell a
+decimal of a unit (0.75 kg, 2.5 m) with a validated unit list; `track_stock = false` services never
+write the stock ledger. Batches and expiry are recorded on delivery, sales use the batch that expires
+first, and Products shows what expires within 30 days. A barcode can no longer be moved silently from
+one product to another.
+
+Still to build: modifiers and add-ons, unit conversion (buy by the box, sell by the piece), bundles,
+serial numbers, and an archived-product view.
+
+Original plan:
 
 - **Variants** replace `pack_sizes`: any product can have options (size, colour, weight, flavour),
   each with its own SKU, barcode, price and stock. The spice shop's 50 g / 250 g / 1 kg packets
@@ -282,6 +309,23 @@ sale function, one VAT rate, three fixed roles, LKR by default, one till. These 
 - Time zone per shop, used for "today", shifts and reports.
 
 ---
+
+### 3.9 Lessons from large POS systems
+
+What the big systems are criticised for, and where this one stands. Sources: vendor documentation and
+reviews (Square, Shopify POS, Lightspeed), October 2026.
+
+| Weakness in large systems | Here |
+|---|---|
+| Offline mode is an afterthought: card payments stop, offline sales expire after a set time (Square keeps them 24 hours), stock goes stale | **Offline-first already.** Every sale is a local record with a client-generated id, uploaded when the connection returns, with no time limit. Keep it that way. |
+| Variants are capped or bolted on, and stock per variant drifts | Variants are ordinary stock-carrying options in the same ledger as everything else (0030). |
+| One industry's assumptions everywhere (retail grids for a salon, recipes for a boutique) | Business types and per-shop features (0030). |
+| Payments locked to the vendor's own processor | Payment method is a field on the sale; no processor is assumed. Integrations stay optional (§6). |
+| Getting your data out is hard | ⬜ A full export (catalogue, customers, sales, ledger) as CSV/JSON is §4.5; build it before charging money. |
+| Branding is a logo upload at most | Per-shop accent and background tone, previewed live, with contrast kept readable automatically (0030). |
+| Silent data changes: price or stock edits with no trail | Append-only stock ledger and audit log already; 0030 adds an audit row for business settings. |
+| Weak multi-location stock | ⬜ §3.7. Tenancy is ready (`app_store_id()`); transfers between shops are not. |
+| No open API or webhooks without an expensive plan | ⬜ §4.3. |
 
 ## 4. Phase C: run it as a platform
 
@@ -368,11 +412,11 @@ Each is a module from [§3.1](#31-business-type-and-modules).
 |---|---|---|
 | **Restaurant / café** | Table map, open tabs per table, split bill, kitchen tickets (KOT), kitchen display screen, course timing, tips, service charge | XL |
 | **Services / salon** | Appointment calendar, staff schedules, service durations, deposits, reminders | L |
-| **Pharmacy** | Batch and expiry (required), prescription notes, controlled-item logging | L |
+| **Pharmacy** | Batch and expiry (built, 0030), prescription notes, controlled-item logging | L |
 | **Wholesale** | Price tiers by quantity, customer-specific prices, quotations, delivery notes, credit terms | L |
 | **Electronics / hardware** | Serial numbers, warranties, repairs and job cards | L |
 | **Manufacturing** (today's spice production, generalised) | Bill of materials, production runs, waste, cost per unit | M (exists for spices) |
-| **Clothing / fashion** | Size and colour variant grid, seasonal collections, exchanges | M |
+| **Clothing / fashion** | Size and colour variant grid (built, 0030), seasonal collections, exchanges | M |
 
 ---
 

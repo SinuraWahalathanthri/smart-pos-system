@@ -1,5 +1,5 @@
 /**
- * Renders the app icons from desktop/build/icon.svg.
+ * Renders the app icons (desktop installers, browser tab) from desktop/build/icon.svg.
  *
  * The generated .ico/.icns/.png files are committed so a release build never depends on this step,
  * but the source of truth is the SVG: change that and re-run `npm run icons`.
@@ -52,7 +52,17 @@ async function writeIcns() {
   fs.writeFileSync(path.join(BUILD, "icon.icns"), Buffer.concat([magic, body]));
 }
 
+/** The browser tab icon and the in-app mark come from the same SVG, so the brand cannot drift. */
+async function writeWebIcons() {
+  const APP = path.join(import.meta.dirname, "..", "app");
+  const pngs = await Promise.all([16, 32, 48].map(render));
+  fs.writeFileSync(path.join(APP, "favicon.ico"), await pngToIco(pngs));
+  fs.copyFileSync(SVG, path.join(APP, "icon.svg"));
+  await sharp(SVG, { density: 600 }).resize(180, 180).png().toFile(path.join(APP, "apple-icon.png"));
+}
+
 await writePngs();
 await writeIco();
 await writeIcns();
-console.log("icons written to desktop/build");
+await writeWebIcons();
+console.log("icons written to desktop/build and app/");

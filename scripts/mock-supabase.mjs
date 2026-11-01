@@ -104,11 +104,11 @@ const subOf = (req) => {
 
 const CATALOGUE_SQL = `
   select coalesce(jsonb_agg(r), '[]'::jsonb) as rows from (
-    select p.id, p.name, p.sku, p.kind, p.sale_mode, p.price_cents, p.tax_rate_pct, p.stock_on_hand, p.reorder_level,
+    select p.id, p.name, p.sku, p.kind, p.sale_mode, p.unit, p.track_stock, p.price_cents, p.tax_rate_pct, p.stock_on_hand, p.reorder_level,
            p.is_favourite, p.is_returnable_bottle, p.color, p.image_path, p.is_active,
            (select to_jsonb(c) from (select name from categories where id = p.category_id) c) as categories,
            coalesce((select jsonb_agg(ps order by ps.sort_order) from (
-             select id, label, weight_g, price_cents, packets_on_hand, sort_order, is_active from pack_sizes where product_id = p.id) ps), '[]'::jsonb) as pack_sizes,
+             select id, label, weight_g, attributes, price_cents, packets_on_hand, sort_order, is_active from pack_sizes where product_id = p.id) ps), '[]'::jsonb) as pack_sizes,
            coalesce((select jsonb_agg(b) from (
              select barcode, pack_size_id, is_primary from product_barcodes where product_id = p.id) b), '[]'::jsonb) as product_barcodes
     from products p order by p.name) r`;

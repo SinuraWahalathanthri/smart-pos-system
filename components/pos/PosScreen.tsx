@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { activeLines, computeBill, newId } from "@/lib/bill";
+import { hasOptions, unitLabel } from "@/lib/business";
 import { ALLOW_SELL_OUT_OF_STOCK } from "@/lib/config";
 import { ensureSeeded, getDb } from "@/lib/data/db";
 import { formatMoney } from "@/lib/money";
-import { SHORTCUTS, shortcutForEvent } from "@/lib/shortcuts";
+import { SHORTCUTS, shortcutEnabled, shortcutForEvent } from "@/lib/shortcuts";
 import { playCue } from "@/lib/sound";
 import { shouldOpenGate, usePos } from "@/lib/store";
 import { asSbClient, getSupabase, isConnected } from "@/lib/supabase/client";
@@ -32,6 +33,8 @@ import { BottleReturnDialog } from "./BottleReturnDialog";
 import { Toaster } from "./Toaster";
 import { VoidDialog } from "./VoidDialog";
 import { WeightPicker } from "./WeightPicker";
+import { MeasureDialog } from "./MeasureDialog";
+import { useTillProfile } from "./useTillProfile";
 
 const isTextField = (el: Element | null) =>
   !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el as HTMLElement).isContentEditable);
@@ -62,7 +65,7 @@ export function PosScreen() {
   const [added, setAdded] = useState<{ name: string; label?: string; qty: number } | null>(null);
   const [dock] = useStoredDockSide();
   const itemCount = usePos((s) =>
-    s.lines.filter((l) => !l.voided).reduce((n, l) => n + l.qty, 0),
+    s.lines.filter((l) => !l.voided).reduce((n, l) => n + (l.unit ? 1 : l.qty), 0),
   );
   const billTotal = usePos((s) => computeBill(s.snapshot()).total);
 
@@ -105,11 +108,18 @@ export function PosScreen() {
   }, []);
 
   // undefined until the first read finishes, so the grid can show "loading" instead of "empty".
+  const { features } = useTillProfile();
+  // Read inside callbacks that are created once; the ref follows the latest pull.
+  const featuresRef = useRef(features);
+  useEffect(() => {
+    featuresRef.current = features;
+  }, [features]);
+
   const liveProducts = useLiveQuery(() => getDb().products.toArray(), [], undefined);
   const products = useMemo<Product[]>(() => liveProducts ?? [], [liveProducts]);
   const productsLoading = liveProducts === undefined;
 
-  /** barcode / sku -> what to add. Spice pack barcodes resolve to a specific pack size. */
+  /** barcode / sku -> what to add. An option's barcode resolves to that exact pack size or variant. */
   const lookup = useMemo(() => {
     const map = new Map<string, { product: Product; pack?: PackSize }>();
     for (const p of products) {
@@ -148,7 +158,8 @@ export function PosScreen() {
 
   const addWithChecks = useCallback((p: Product, pack?: PackSize) => {
     const s = usePos.getState();
-    const out = pack ? pack.stock <= 0 : p.saleMode === "unit" && p.stock <= 0;
+    // A service never runs out; a product with options counts stock on the option picked.
+    const out = p.trackStock === false ? false : pack ? pack.stock <= 0 : !hasOptions(p) && p.stock <= 0;
     if (out && !ALLOW_SELL_OUT_OF_STOCK) {
       s.notify(`${p.name}${pack ? " " + pack.label : ""} is out of stock`, "error");
       playCue("error");
@@ -166,7 +177,8 @@ export function PosScreen() {
 
   const pickProduct = useCallback(
     (p: Product) => {
-      if (p.saleMode === "weighted") usePos.getState().openDialog({ type: "weight", product: p });
+      if (hasOptions(p)) usePos.getState().openDialog({ type: "weight", product: p });
+      else if (p.saleMode === "measured") usePos.getState().openDialog({ type: "measure", product: p });
       else addWithChecks(p);
     },
     [addWithChecks],
@@ -180,7 +192,7 @@ export function PosScreen() {
         usePos.getState().notify(`Not found: ${code}. Ask a supervisor to add this product.`, "error");
         return;
       }
-      if (hit.product.saleMode === "weighted" && !hit.pack) {
+      if ((hasOptions(hit.product) || hit.product.saleMode === "measured") && !hit.pack) {
         pickProduct(hit.product);
         return;
       }
@@ -228,7 +240,10 @@ export function PosScreen() {
         case "customer": return s.openDialog({ type: "customer" });
         case "discount":
           return s.lines.length ? s.openDialog({ type: "discount" }) : s.notify("Add items before a discount", "warn");
-        case "bottle": return s.openDialog({ type: "bottles" });
+        case "bottle":
+          // F7 still reaches here on a shop that switched bottles off; say so rather than open a
+          // dialog for something the shop does not do.
+          return featuresRef.current.bottles ? s.openDialog({ type: "bottles" }) : s.notify("This shop does not track bottles", "info");
         case "void": return void startVoid();
         case "hold": return void hold();
         case "exact":
@@ -307,8 +322,12 @@ export function PosScreen() {
         .map((p) => ({
           id: p.id,
           title: p.name,
-          subtitle: `${p.category}${p.saleMode === "weighted" ? " · choose a pack size" : p.barcode ? " · " + p.barcode : ""}`,
-          right: p.saleMode === "weighted" ? `from ${formatMoney(Math.min(...p.packSizes.map((x) => x.price)), false)}` : formatMoney(p.price, false),
+          subtitle: `${p.category}${
+            p.saleMode === "weighted" ? " · choose a pack size" : p.saleMode === "variant" ? " · choose an option" : p.barcode ? " · " + p.barcode : ""
+          }`,
+          right: hasOptions(p)
+            ? `from ${formatMoney(Math.min(...p.packSizes.map((x) => x.price)), false)}`
+            : `${formatMoney(p.price, false)}${p.saleMode === "measured" ? " / " + unitLabel(p.unit) : ""}`,
           haystack: [p.name, p.category, p.barcode, p.sku, ...p.packSizes.map((x) => x.barcode)].filter(Boolean).join(" ").toLowerCase(),
           run: () => pickProduct(p),
         })),
@@ -317,7 +336,11 @@ export function PosScreen() {
 
   const actionItems = useMemo<PickItem[]>(
     () =>
-      SHORTCUTS.filter((s) => ["qty", "search", "calc", "customer", "discount", "bottle", "void", "hold", "exact", "pay", "help", "lock"].includes(s.id)).map((s) => ({
+      SHORTCUTS.filter(
+        (s) =>
+          ["qty", "search", "calc", "customer", "discount", "bottle", "void", "hold", "exact", "pay", "help", "lock"].includes(s.id) &&
+          shortcutEnabled(s.id, features),
+      ).map((s) => ({
         id: "act-" + s.id,
         title: s.label,
         subtitle: "Action",
@@ -325,7 +348,7 @@ export function PosScreen() {
         haystack: (s.label + " " + s.id).toLowerCase(),
         run: () => runAction(s.id),
       })),
-    [runAction],
+    [runAction, features],
   );
 
   if (!hydrated || !session) {
@@ -395,6 +418,18 @@ export function PosScreen() {
             s.addProduct(dialog.product, pack, qty);
             playCue("ok");
             if (pack.stock <= 0) s.notify(`Stock shows 0 for ${dialog.product.name} ${pack.label}. Check the shelf.`, "warn");
+            close();
+          }}
+        />
+      )}
+      {dialog?.type === "measure" && (
+        <MeasureDialog
+          product={dialog.product}
+          onClose={close}
+          onAdd={(qty) => {
+            const s = usePos.getState();
+            s.addProduct(dialog.product, undefined, qty);
+            playCue("ok");
             close();
           }}
         />

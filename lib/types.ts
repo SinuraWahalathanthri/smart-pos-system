@@ -1,13 +1,15 @@
 import type { Cents } from "./money";
 
 export type Role = "owner" | "supervisor" | "cashier";
-export type SaleMode = "unit" | "weighted";
+/** unit: by the piece. weighted: fixed packets. variant: size/colour options. measured: a decimal amount of `unit`. */
+export type SaleMode = "unit" | "weighted" | "variant" | "measured";
 export type PayMethod = "cash" | "card" | "qr" | "credit";
 
 export interface PackSize {
   id: string;
-  label: string; // "250 g"
-  weightG: number;
+  label: string; // "250 g", or "M / Black" for a variant
+  weightG?: number; // packets only; a variant has no weight
+  attributes?: Record<string, string>; // variants: {"Size": "M", "Colour": "Black"}
   price: Cents; // fixed price for this packet size, tax-inclusive
   barcode?: string;
   stock: number; // packets on hand
@@ -23,7 +25,9 @@ export interface Product {
   stock: number; // unit items: pieces
   barcode?: string;
   sku?: string;
-  packSizes: PackSize[]; // weighted items only
+  packSizes: PackSize[]; // weighted and variant items: the options the till picks from
+  unit?: string; // counting unit (lib/business.ts UNITS); "pcs" when absent
+  trackStock?: boolean; // false for a service: never "out of stock"
   favourite: boolean;
   imageUrl?: string;
   color: string; // tile accent when there is no picture
@@ -50,7 +54,8 @@ export interface BillLine {
   packSizeId?: string;
   name: string;
   label?: string; // pack size label
-  qty: number;
+  qty: number; // a decimal for a measured item (0.75 kg)
+  unit?: string; // measured items: shown next to the quantity
   unitPrice: Cents;
   taxRate: number;
   returnableBottle?: boolean;

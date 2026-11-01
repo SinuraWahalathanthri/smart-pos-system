@@ -14,14 +14,33 @@ interface Props {
   onClose: () => void;
 }
 
-/** Pick a branded pack size for a spice. Number keys choose, +/- change packets, Enter adds. */
+/**
+ * Pick one of a product's options: a packet size for a weighted product, or a size/colour for a
+ * variant one (0030). Number keys choose, +/- change the quantity, Enter adds.
+ *
+ * A variant product with two axes (Size × Colour) also gets a row of chips per axis, so a cashier
+ * can tap "M" then "Black" instead of hunting through eighteen tiles.
+ */
 export function WeightPicker({ product, onAdd, onClose }: Props) {
   const startQty = usePos.getState().pendingQty;
-  const sizes = product.packSizes;
-  const defaultIdx = Math.max(0, sizes.findIndex((s) => s.weightG === 250));
-  const [idx, setIdx] = useState(defaultIdx);
+  const variant = product.saleMode === "variant";
+  const all = product.packSizes;
+  const axes = variant ? axesOf(all) : [];
+  const [chosen, setChosen] = useState<Record<string, string>>({});
+  const sizes = all.filter((s) => Object.entries(chosen).every(([k, v]) => s.attributes?.[k] === v));
+  const firstInStock = sizes.findIndex((s) => s.stock > 0);
+  const defaultIdx = variant ? Math.max(0, firstInStock) : Math.max(0, sizes.findIndex((s) => s.weightG === 250));
+  const [picked, setIdx] = useState(defaultIdx);
+  const idx = Math.min(picked, Math.max(0, sizes.length - 1));
   const [qty, setQty] = useState(startQty);
   const pack = sizes[idx];
+  const noun = variant ? "option" : "pack size";
+  const qtyLabel = variant ? "Quantity" : "Packets";
+
+  function choose(axis: string, value: string) {
+    setChosen((c) => (c[axis] === value ? Object.fromEntries(Object.entries(c).filter(([k]) => k !== axis)) : { ...c, [axis]: value }));
+    setIdx(0);
+  }
 
   function commit() {
     if (pack) onAdd(pack, qty);
@@ -69,12 +88,38 @@ export function WeightPicker({ product, onAdd, onClose }: Props) {
           {product.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("")}
         </div>
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wider text-muted">Choose pack size</p>
-          <p className="text-xs text-muted">Press 1–{sizes.length} · ←/→ to move · ↑/↓ or +/− for packets</p>
+          <p className="text-sm font-semibold uppercase tracking-wider text-muted">Choose {noun}</p>
+          <p className="text-xs text-muted">
+            Press 1–{Math.min(9, sizes.length)} · ←/→ to move · ↑/↓ or +/− for {qtyLabel.toLowerCase()}
+          </p>
         </div>
       </div>
 
-      <div role="radiogroup" aria-label="Pack size" className="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-2">
+      {axes.length > 1 && (
+        <div className="mb-3 space-y-2">
+          {axes.map((a) => (
+            <div key={a.name} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-16 text-xs font-semibold uppercase tracking-wider text-muted">{a.name}</span>
+              {a.values.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={chosen[a.name] === v}
+                  onClick={() => choose(a.name, v)}
+                  className={`rounded-full border px-3 py-1 text-sm font-medium ${
+                    chosen[a.name] === v ? "border-primary bg-primary text-primary-fg" : "border-border bg-surface-2 hover:border-muted"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {sizes.length === 0 && <p className="mb-2 text-sm text-muted">No option matches. Tap a chip again to clear it.</p>}
+
+      <div role="radiogroup" aria-label={variant ? "Option" : "Pack size"} className="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-2">
         {sizes.map((s, i) => {
           const out = s.stock <= 0;
           const low = !out && s.stock <= PACK_LOW_STOCK;
@@ -89,8 +134,8 @@ export function WeightPicker({ product, onAdd, onClose }: Props) {
                 i === idx ? "border-primary bg-primary-soft" : "border-border bg-surface-2 hover:border-muted"
               } ${out ? "opacity-60" : ""}`}
             >
-              <Keycap className="absolute left-1.5 top-1.5">{i + 1}</Keycap>
-              <span className="mt-3 text-xl font-bold">{s.label}</span>
+              {i < 9 && <Keycap className="absolute left-1.5 top-1.5">{i + 1}</Keycap>}
+              <span className={`mt-3 text-center font-bold ${variant ? "text-base" : "text-xl"}`}>{s.label}</span>
               <span className="num text-base font-semibold">{formatMoney(s.price, false)}</span>
               <span
                 className={`num text-xs font-semibold ${out ? "text-danger" : low ? "text-warning" : "text-muted"}`}
@@ -105,7 +150,7 @@ export function WeightPicker({ product, onAdd, onClose }: Props) {
 
       <div className="mt-4 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-muted">Packets</span>
+          <span className="text-sm font-semibold text-muted">{qtyLabel}</span>
           <Button variant="secondary" className="h-10 w-10 !px-0" aria-label="Fewer" onClick={() => setQty((q) => Math.max(1, q - 1))}>
             <Minus size={16} />
           </Button>
@@ -122,8 +167,21 @@ export function WeightPicker({ product, onAdd, onClose }: Props) {
         </div>
       </div>
       {pack && pack.stock <= 0 && (
-        <p className="mt-2 text-sm font-medium text-warning">Stock shows 0 for this size. You can still sell it, but check the shelf.</p>
+        <p className="mt-2 text-sm font-medium text-warning">Stock shows 0 for this {noun}. You can still sell it, but check the shelf.</p>
       )}
     </Dialog>
   );
+}
+
+/** The axes a variant product's options use, with their values in first-seen order. */
+function axesOf(options: PackSize[]): { name: string; values: string[] }[] {
+  const map = new Map<string, string[]>();
+  for (const o of options) {
+    for (const [k, v] of Object.entries(o.attributes ?? {})) {
+      const vals = map.get(k) ?? [];
+      if (!vals.includes(v)) vals.push(v);
+      map.set(k, vals);
+    }
+  }
+  return [...map.entries()].map(([name, values]) => ({ name, values }));
 }

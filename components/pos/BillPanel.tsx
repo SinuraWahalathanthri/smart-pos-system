@@ -35,7 +35,7 @@ export function BillPanel({
     () => computeBill({ lines, deposits, discount }),
     [lines, deposits, discount],
   );
-  const itemCount = lines.filter((l) => !l.voided).reduce((n, l) => n + l.qty, 0);
+  const itemCount = lines.filter((l) => !l.voided).reduce((n, l) => n + (l.unit ? 1 : l.qty), 0);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export function BillPanel({
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted">
             <PackageOpen size={36} strokeWidth={1.4} />
             <p className="font-medium text-text">Scan an item or pick one from the grid</p>
-            <p className="text-sm">Spices: choose a product, then a pack size.</p>
+            <p className="text-sm">Tap a product, or scan its barcode. Items with sizes or options ask which one.</p>
           </div>
         ) : (
           <ul>

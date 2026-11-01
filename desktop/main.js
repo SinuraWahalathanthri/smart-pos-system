@@ -19,6 +19,18 @@ const { app, BrowserWindow, Menu, shell, session, dialog, protocol, ipcMain } = 
 const path = require("node:path");
 const { createHandler, APP_ORIGIN } = require("./protocol");
 
+/**
+ * The app was named "Spice Shop POS" before 2.3.0, and Electron keeps its local data (the till's
+ * sign-in, the catalogue and, above all, offline sales not yet uploaded) in a folder named after the
+ * app. A rename would silently start every till with an empty database and strand those sales, so an
+ * existing folder under the old name keeps being used. Must run before the app is ready.
+ * An explicit --user-data-dir (the smoke test uses one) still wins.
+ */
+const LEGACY_DATA_DIR = path.join(app.getPath("appData"), "Spice Shop POS");
+if (!app.commandLine.hasSwitch("user-data-dir") && require("node:fs").existsSync(LEGACY_DATA_DIR)) {
+  app.setPath("userData", LEGACY_DATA_DIR);
+}
+
 const isDev = !app.isPackaged && process.env.DESKTOP_DEV === "1";
 const DEV_URL = process.env.DESKTOP_DEV_URL || "http://localhost:3000";
 

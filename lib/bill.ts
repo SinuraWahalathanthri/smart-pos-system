@@ -111,6 +111,9 @@ export const newId = (): string =>
     : `id-${Date.now()}-${seq++}`;
 
 /** Add a product (or pack size) to the bill. Scanning the same item again raises its quantity. */
+/** Quantities are kept to 3 decimals (grams, millilitres): 0.1 + 0.2 must not become 0.30000000000000004. */
+export const roundQty = (n: number) => Math.round(n * 1000) / 1000;
+
 export function addLine(lines: BillLine[], incoming: Omit<BillLine, "id">): { lines: BillLine[]; id: string } {
   const existing = lines.find(
     (l) => !l.voided && l.productId === incoming.productId && l.packSizeId === incoming.packSizeId,
@@ -118,7 +121,7 @@ export function addLine(lines: BillLine[], incoming: Omit<BillLine, "id">): { li
   if (existing) {
     return {
       id: existing.id,
-      lines: lines.map((l) => (l.id === existing.id ? { ...l, qty: l.qty + incoming.qty } : l)),
+      lines: lines.map((l) => (l.id === existing.id ? { ...l, qty: roundQty(l.qty + incoming.qty) } : l)),
     };
   }
   const id = newId();
@@ -139,9 +142,9 @@ export function voidQty(
 ): BillLine[] {
   const target = lines.find((l) => l.id === lineId && !l.voided);
   if (!target || qty <= 0) return lines;
-  const removed = Math.min(qty, target.qty);
+  const removed = roundQty(Math.min(qty, target.qty));
   const voided: BillLine = { ...target, id: newId(), qty: removed, voided: { reason, by, at } };
-  const remaining = target.qty - removed;
+  const remaining = roundQty(target.qty - removed);
   const out: BillLine[] = [];
   for (const l of lines) {
     if (l.id !== lineId) {

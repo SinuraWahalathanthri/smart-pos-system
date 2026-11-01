@@ -19,7 +19,8 @@ import {
   X,
 } from "lucide-react";
 import { formatMoney } from "@/lib/money";
-import { SHORTCUTS } from "@/lib/shortcuts";
+import { SHORTCUTS, shortcutEnabled } from "@/lib/shortcuts";
+import { useTillProfile } from "./useTillProfile";
 
 /** Actions that need a bill line selected first; hidden until one is, so taps do not dead-end. */
 const NEEDS_LINE = new Set(["qty", "void"]);
@@ -62,7 +63,10 @@ export function ActionMenu({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const actions = SHORTCUTS.filter((s) => ICONS[s.id] && (!NEEDS_LINE.has(s.id) || hasLines));
+  const { features } = useTillProfile();
+  const actions = SHORTCUTS.filter(
+    (s) => ICONS[s.id] && (!NEEDS_LINE.has(s.id) || hasLines) && shortcutEnabled(s.id, features),
+  );
 
   return (
     <div className="fade-in fixed inset-0 z-50 flex items-end bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

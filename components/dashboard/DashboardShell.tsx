@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   Pencil,
+  Settings,
   Receipt,
   ReceiptText,
   ShieldCheck,
@@ -26,6 +27,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { effectiveFeatures, type Feature, type Features } from "@/lib/business";
 import { useShop, permissions, type Role } from "./useShop";
 import { ShopDetailsDialog } from "./ShopDetailsDialog";
 
@@ -36,6 +38,8 @@ type NavItem = {
   needs: keyof ReturnType<typeof permissions>;
   /** Kept in the header; everything else lives in the menu. */
   primary?: boolean;
+  /** Hidden when the shop has switched this feature off in Settings (lib/business.ts). */
+  feature?: Feature;
 };
 
 /**
@@ -54,7 +58,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       // Every role with its own dashboard sign-in, cashiers included. At the counter a cashier uses
       // F7 instead: the till is signed in as a device account, so a link from there would open the
       // dashboard with the device's role, not the cashier's.
-      { href: "/bottles", label: "Bottles", icon: Droplets, needs: "viewBottles" },
+      { href: "/bottles", label: "Bottles", icon: Droplets, needs: "viewBottles", feature: "bottles" },
       { href: "/credit", label: "Credit", icon: Wallet, needs: "manageCredit" },
     ],
   },
@@ -62,7 +66,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: "Stock",
     items: [
       { href: "/products", label: "Products", icon: Boxes, needs: "manageProducts", primary: true },
-      { href: "/production", label: "Production", icon: Factory, needs: "viewAnalytics" },
+      { href: "/production", label: "Production", icon: Factory, needs: "viewAnalytics", feature: "production" },
       { href: "/purchases", label: "Purchases", icon: Truck, needs: "viewAnalytics" },
     ],
   },
@@ -79,6 +83,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: "Admin",
     items: [
       { href: "/staff", label: "Staff", icon: Users, needs: "manageStaff" },
+      { href: "/settings", label: "Settings", icon: Settings, needs: "manageStaff" },
       { href: "/audit", label: "Audit", icon: ShieldCheck, needs: "viewAudit" },
     ],
   },
@@ -90,11 +95,12 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
 ];
 
-/** The full, role-filtered menu, grouped. A group with nothing left to show is dropped. */
-function useVisibleNav(can: ReturnType<typeof permissions>) {
-  return NAV.map(({ group, items }) => ({ group, items: items.filter((n) => can[n.needs]) })).filter(
-    (g) => g.items.length > 0,
-  );
+/** The full, role- and feature-filtered menu, grouped. A group with nothing left to show is dropped. */
+function useVisibleNav(can: ReturnType<typeof permissions>, features: Features) {
+  return NAV.map(({ group, items }) => ({
+    group,
+    items: items.filter((n) => can[n.needs] && (!n.feature || features[n.feature])),
+  })).filter((g) => g.items.length > 0);
 }
 
 /**
@@ -179,7 +185,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [editingShop, setEditingShop] = useState(false);
   const role = ctx?.role;
   const can = permissions(role, ctx?.is_platform_admin);
-  const groups = useVisibleNav(can);
+  const groups = useVisibleNav(can, effectiveFeatures(ctx?.store?.business_type, ctx?.store?.features));
 
   if (loading) {
     return <Centered>Loading your shop...</Centered>;

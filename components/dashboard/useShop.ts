@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ShopProfile } from "@/lib/business";
 import { getSupabase } from "@/lib/supabase/client";
+import { setCurrency } from "@/lib/money";
+import { applyShopTheme } from "@/lib/theme";
 
-export type Shop = {
+export type Shop = ShopProfile & {
   id: string;
   name: string;
   address: string | null;
@@ -18,6 +21,9 @@ export type Shop = {
 };
 
 export type Role = "owner" | "supervisor" | "cashier";
+
+/** Fired after the shop's settings change, so every mounted useShop() reloads (the shell's menu too). */
+export const SHOP_CHANGED = "pos-shop-changed";
 
 export type ShopContext = {
   onboarded: boolean;
@@ -46,8 +52,9 @@ export function useShop() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // Quiet reloads (after Settings saves) keep the screen up instead of flashing "Loading".
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const sb = getSupabase();
@@ -78,6 +85,8 @@ export function useShop() {
         router.replace(parsed.is_platform_admin ? "/platform" : "/onboarding");
         return;
       }
+      applyShopTheme(parsed.store?.theme);
+      setCurrency(parsed.store?.currency);
       setCtx({
         ...parsed,
         stores: (list as { id: string; name: string; role: Role }[] | null) ?? [],
@@ -91,6 +100,9 @@ export function useShop() {
 
   useEffect(() => {
     void load();
+    const again = () => void load(true);
+    window.addEventListener(SHOP_CHANGED, again);
+    return () => window.removeEventListener(SHOP_CHANGED, again);
   }, [load]);
 
   /** Switch the store the dashboard is working in, then reload what it shows. */
@@ -112,7 +124,7 @@ export function useShop() {
     router.replace("/login");
   }, [router]);
 
-  return { ctx, loading, error, reload: load, switchStore, signOut };
+  return { ctx, loading, error, reload: () => load(), switchStore, signOut };
 }
 
 /** What each role may do in the dashboard. The server enforces the same thing. */
